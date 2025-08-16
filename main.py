@@ -86,6 +86,7 @@ from PyQt5.QtWidgets import (
     QGraphicsEllipseItem,
     QGraphicsLineItem,
     QGraphicsObject,
+    QGraphicsDropShadowEffect,
     QDockWidget,
     QWidget,
     QVBoxLayout,
@@ -646,6 +647,7 @@ class NodeItem(QGraphicsObject):
         self.setFlag(QGraphicsItem.ItemSendsGeometryChanges, True)
         # Children: label item
         self.label_item = EditableTextItem(self)
+        self.label_item.setZValue(1)
         # Resizing handle (bottom right)
         self.handle_size = 8
         self.resizing = False
@@ -672,12 +674,20 @@ class NodeItem(QGraphicsObject):
             self.data.width = min_w
         if self.data.height < min_h:
             self.data.height = min_h
-        # Update label position
+        # Update label text and appearance
         self.label_item.setPlainText(self.data.label)
-        # Center label
-        label_rect = self.label_item.boundingRect()
-        # We will adjust in paint
+        self.label_item.setFont(QFont(self.data.font_family, int(self.data.font_size)))
+        self.label_item.setDefaultTextColor(QColor(self.data.font_color))
         self.prepareGeometryChange()
+        self._position_label()
+
+    def _position_label(self) -> None:
+        """Center the editable label within the node bounds."""
+        label_rect = self.label_item.boundingRect()
+        self.label_item.setPos(
+            (self.data.width - label_rect.width()) / 2,
+            (self.data.height - label_rect.height()) / 2,
+        )
 
     def boundingRect(self) -> QRectF:
         # Add margin for the top connection handle so that it is included in the redraw region
@@ -696,14 +706,11 @@ class NodeItem(QGraphicsObject):
             painter.setPen(QPen(QColor(self.data.border_color), self.data.border_width))
             radius = 8
         painter.drawRoundedRect(rect, radius, radius)
-        # Draw label centred
-        metrics = QFontMetrics(QFont(self.data.font_family, int(self.data.font_size)))
-        text_rect = metrics.boundingRect(self.data.label)
-        text_x = (rect.width() - text_rect.width()) / 2
-        text_y = (rect.height() - text_rect.height()) / 2 + metrics.ascent()
-        painter.setFont(QFont(self.data.font_family, int(self.data.font_size)))
-        painter.setPen(QPen(QColor(self.data.font_color)))
-        painter.drawText(QPointF(text_x, text_y), self.data.label)
+        # Highlight if selected
+        if self.isSelected():
+            painter.setBrush(Qt.NoBrush)
+            painter.setPen(QPen(QColor("#00AEEF"), 2))
+            painter.drawRoundedRect(rect, radius, radius)
         # Resize handle
         painter.setBrush(QBrush(QColor("#888888")))
         painter.setPen(Qt.NoPen)
@@ -746,6 +753,12 @@ class NodeItem(QGraphicsObject):
                 self.request_connection.emit(self, event)
                 event.accept()
                 return
+            elif event.modifiers() & Qt.ShiftModifier:
+                # Toggle selection without affecting others
+                self.setSelected(not self.isSelected())
+                self.node_selected.emit(self)
+                event.accept()
+                return
         super().mousePressEvent(event)
         # Selection
         if event.button() == Qt.LeftButton:
@@ -769,6 +782,7 @@ class NodeItem(QGraphicsObject):
             self.data.height = new_h
             self.prepareGeometryChange()
             self.update()
+            self._position_label()
             # Update connections
             for conn in self.connections:
                 conn.update_position()
@@ -807,6 +821,15 @@ class NodeItem(QGraphicsObject):
                 conn.update_position()
             # Notify editor
             self.node_moved.emit(self)
+        elif change == QGraphicsItem.ItemSelectedHasChanged:
+            if bool(value):
+                effect = QGraphicsDropShadowEffect()
+                effect.setBlurRadius(15)
+                effect.setColor(QColor("#00AEEF"))
+                effect.setOffset(0)
+                self.setGraphicsEffect(effect)
+            else:
+                self.setGraphicsEffect(None)
         return super().itemChange(change, value)
 
     def mouseDoubleClickEvent(self, event):
@@ -850,6 +873,7 @@ class ConnectionItem(QGraphicsLineItem):
         self.setFlag(QGraphicsItem.ItemIsSelectable, True)
         self.setAcceptedMouseButtons(Qt.LeftButton)
         self.setZValue(-1)
+        self.setPen(QPen(QColor("#000000"), 1))
 
     def update_position(self) -> None:
         """Recompute the endpoints of the line based on anchor positions."""
@@ -896,6 +920,25 @@ class ConnectionItem(QGraphicsLineItem):
                 scene.removeItem(self.dest_handle)
             self.source_handle = None
             self.dest_handle = None
+
+    def paint(self, painter, option, widget=None):
+        pen = QPen(QColor("#000000"), 1)
+        if self.isSelected():
+            pen = QPen(QColor("#00AEEF"), 2)
+        painter.setPen(pen)
+        painter.drawLine(self.line())
+
+    def itemChange(self, change, value):
+        if change == QGraphicsItem.ItemSelectedHasChanged:
+            if bool(value):
+                effect = QGraphicsDropShadowEffect()
+                effect.setBlurRadius(15)
+                effect.setColor(QColor("#00AEEF"))
+                effect.setOffset(0)
+                self.setGraphicsEffect(effect)
+            else:
+                self.setGraphicsEffect(None)
+        return super().itemChange(change, value)
 
 
 #####################################################
@@ -1006,6 +1049,7 @@ class ConceptMapEditor(QMainWindow):
         self.scene = QGraphicsScene(self)
         self.view = QGraphicsView(self.scene, self)
         self.view.setRenderHint(QPainter.Antialiasing)
+        self.view.setDragMode(QGraphicsView.RubberBandDrag)
         self.setCentralWidget(self.view)
         # Style editor dock
         self.style_editor = StyleEditor(self)
