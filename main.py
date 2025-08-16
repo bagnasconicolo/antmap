@@ -99,6 +99,7 @@ from PyQt5.QtWidgets import (
     QColorDialog,
     QFileDialog,
     QInputDialog,
+    QDialog,
     QAction,
     QMenu,
     QMessageBox,
@@ -1074,6 +1075,14 @@ class ConceptMapEditor(QMainWindow):
         # Fit view
         self.view.fitInView(self.scene.itemsBoundingRect(), Qt.KeepAspectRatio)
 
+    def import_file(self) -> None:
+        """Import a map. Currently behaves like :meth:`open_file`.
+
+        This provides a dedicated entry point for future extensions where
+        imported maps could be merged into an existing one instead of
+        replacing the current scene."""
+        self.open_file()
+
     def save_file(self) -> None:
         """Save current map."""
         if not self.document.filepath:
@@ -1302,11 +1311,52 @@ class ConceptMapEditor(QMainWindow):
         self.dock.show()
 
 
+class StartupDialog(QDialog):
+    """Simple start-up dialog offering basic file operations."""
+
+    def __init__(self, editor: "ConceptMapEditor") -> None:
+        super().__init__(editor)
+        self.editor = editor
+        self.setWindowTitle("Benvenuto")
+        layout = QVBoxLayout(self)
+        new_btn = QPushButton("Nuova mappa")
+        open_btn = QPushButton("Apri...")
+        import_btn = QPushButton("Importa...")
+        save_btn = QPushButton("Salva")
+        quit_btn = QPushButton("Esci")
+        for btn in (new_btn, open_btn, import_btn, save_btn, quit_btn):
+            layout.addWidget(btn)
+        new_btn.clicked.connect(self.handle_new)
+        open_btn.clicked.connect(self.handle_open)
+        import_btn.clicked.connect(self.handle_import)
+        save_btn.clicked.connect(self.handle_save)
+        quit_btn.clicked.connect(self.reject)
+
+    def handle_new(self) -> None:
+        self.editor.new_file()
+        self.accept()
+
+    def handle_open(self) -> None:
+        self.editor.open_file()
+        self.accept()
+
+    def handle_import(self) -> None:
+        self.editor.import_file()
+        self.accept()
+
+    def handle_save(self) -> None:
+        self.editor.save_file()
+        self.accept()
+
+
 def main() -> None:
     app = QApplication(sys.argv)
     editor = ConceptMapEditor()
-    editor.show()
-    sys.exit(app.exec_())
+    start = StartupDialog(editor)
+    if start.exec_() == QDialog.Accepted:
+        editor.show()
+        sys.exit(app.exec_())
+    sys.exit(0)
 
 
 if __name__ == "__main__":
