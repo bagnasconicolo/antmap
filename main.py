@@ -57,6 +57,8 @@ Dependencies:
 import sys
 import uuid
 import xml.etree.ElementTree as ET
+import copy
+import math
 from typing import Dict, List, Optional, Tuple
 
 from PyQt5.QtCore import (
@@ -74,6 +76,7 @@ from PyQt5.QtGui import (
     QFontMetrics,
     QPainter,
     QTextCursor,
+    QKeySequence,
 )
 from PyQt5.QtWidgets import (
     QApplication,
@@ -101,6 +104,8 @@ from PyQt5.QtWidgets import (
     QAction,
     QMenu,
     QMessageBox,
+    QFontComboBox,
+    QCheckBox,
 )
 
 
@@ -115,7 +120,7 @@ class ConceptData:
                  font_family: str = "Verdana", font_size: float = 12.0,
                  font_color: str = "0,0,0,255", fill_color: str = "237,244,246,255",
                  border_color: str = "0,0,0,255", border_width: float = 1.0,
-                 is_linker: bool = False) -> None:
+                 font_bold: bool = False, is_linker: bool = False) -> None:
         self.id = cid
         self.label = label
         self.x = x
@@ -128,16 +133,20 @@ class ConceptData:
         self.fill_color = fill_color
         self.border_color = border_color
         self.border_width = border_width
+        self.font_bold = font_bold
         self.is_linker = is_linker
 
 
 class ConnectionData:
     """Represents connection data between two node ids."""
 
-    def __init__(self, cid: str, from_id: str, to_id: str) -> None:
+    def __init__(self, cid: str, from_id: str, to_id: str,
+                 arrow_start: bool = False, arrow_end: bool = True) -> None:
         self.id = cid
         self.from_id = from_id
         self.to_id = to_id
+        self.arrow_start = arrow_start
+        self.arrow_end = arrow_end
 
 
 class CXLDocument:
@@ -664,7 +673,10 @@ class NodeItem(QGraphicsObject):
     def _update_bounds(self) -> None:
         """Update the bounding rect based on label and data width/height."""
         # Adjust label width based on text
-        metrics = QFontMetrics(QFont(self.data.font_family, int(self.data.font_size)))
+        font = QFont(self.data.font_family, int(self.data.font_size))
+        if getattr(self.data, "font_bold", False):
+            font.setBold(True)
+        metrics = QFontMetrics(font)
         text_rect = metrics.boundingRect(self.data.label)
         # Ensure width >= text width + padding
         pad = 10
@@ -676,7 +688,10 @@ class NodeItem(QGraphicsObject):
             self.data.height = min_h
         # Update label text and appearance
         self.label_item.setPlainText(self.data.label)
-        self.label_item.setFont(QFont(self.data.font_family, int(self.data.font_size)))
+        lbl_font = QFont(self.data.font_family, int(self.data.font_size))
+        if getattr(self.data, "font_bold", False):
+            lbl_font.setBold(True)
+        self.label_item.setFont(lbl_font)
         self.label_item.setDefaultTextColor(QColor(self.data.font_color))
         self.prepareGeometryChange()
         self._position_label()
@@ -861,6 +876,8 @@ class ConnectionItem(QGraphicsLineItem):
         self.dest = dest
         self.source_anchor = source_anchor
         self.dest_anchor = dest_anchor
+        self.arrow_start = False
+        self.arrow_end = True
         # Handles for anchor repositioning
         self.source_handle: Optional[AnchorHandle] = None
         self.dest_handle: Optional[AnchorHandle] = None
@@ -926,7 +943,28 @@ class ConnectionItem(QGraphicsLineItem):
         if self.isSelected():
             pen = QPen(QColor("#00AEEF"), 2)
         painter.setPen(pen)
-        painter.drawLine(self.line())
+        line = self.line()
+        painter.drawLine(line)
+        angle = math.atan2(line.dy(), line.dx())
+        arrow_size = 10
+        if self.arrow_end:
+            p = line.p2()
+            dest_arrow = [
+                p,
+                QPointF(p.x() - arrow_size * math.cos(angle - math.pi / 6), p.y() - arrow_size * math.sin(angle - math.pi / 6)),
+                QPointF(p.x() - arrow_size * math.cos(angle + math.pi / 6), p.y() - arrow_size * math.sin(angle + math.pi / 6)),
+            ]
+            painter.setBrush(pen.color())
+            painter.drawPolygon(*dest_arrow)
+        if self.arrow_start:
+            p = line.p1()
+            start_arrow = [
+                p,
+                QPointF(p.x() + arrow_size * math.cos(angle - math.pi / 6), p.y() + arrow_size * math.sin(angle - math.pi / 6)),
+                QPointF(p.x() + arrow_size * math.cos(angle + math.pi / 6), p.y() + arrow_size * math.sin(angle + math.pi / 6)),
+            ]
+            painter.setBrush(pen.color())
+            painter.drawPolygon(*start_arrow)
 
     def itemChange(self, change, value):
         if change == QGraphicsItem.ItemSelectedHasChanged:
@@ -946,21 +984,29 @@ class ConnectionItem(QGraphicsLineItem):
 #####################################################
 
 class StyleEditor(QWidget):
-    """Panel for editing the style of a selected node."""
+    """Panel for editing the style of a selected node or connection."""
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.current_node: Optional[NodeItem] = None
+        self.current_connection: Optional[ConnectionItem] = None
         layout = QVBoxLayout(self)
         # Label
         self.label_edit = QLineEdit()
         layout.addWidget(QLabel("Etichetta:"))
         layout.addWidget(self.label_edit)
+        # Font family
+        self.font_combo = QFontComboBox()
+        layout.addWidget(QLabel("Font:"))
+        layout.addWidget(self.font_combo)
         # Font size
         self.font_size_spin = QSpinBox()
         self.font_size_spin.setRange(6, 72)
         layout.addWidget(QLabel("Dimensione font:"))
         layout.addWidget(self.font_size_spin)
+        # Bold option
+        self.bold_check = QCheckBox("Grassetto")
+        layout.addWidget(self.bold_check)
         # Fill colour
         self.fill_btn = QPushButton("Scegli colore riempimento")
         layout.addWidget(self.fill_btn)
@@ -972,6 +1018,15 @@ class StyleEditor(QWidget):
         self.border_thick_spin.setRange(0, 10)
         layout.addWidget(QLabel("Spessore bordo:"))
         layout.addWidget(self.border_thick_spin)
+        # Arrowhead buttons for connections
+        self.arrow_start_btn = QPushButton("Freccia iniziale")
+        self.arrow_start_btn.setCheckable(True)
+        self.arrow_end_btn = QPushButton("Freccia finale")
+        self.arrow_end_btn.setCheckable(True)
+        layout.addWidget(self.arrow_start_btn)
+        layout.addWidget(self.arrow_end_btn)
+        self.arrow_start_btn.hide()
+        self.arrow_end_btn.hide()
         # Apply button
         self.apply_btn = QPushButton("Applica")
         layout.addWidget(self.apply_btn)
@@ -980,24 +1035,59 @@ class StyleEditor(QWidget):
         self.apply_btn.clicked.connect(self.apply_changes)
         self.fill_btn.clicked.connect(self.choose_fill_color)
         self.border_btn.clicked.connect(self.choose_border_color)
+        self.arrow_start_btn.clicked.connect(self.apply_changes)
+        self.arrow_end_btn.clicked.connect(self.apply_changes)
 
     def set_node(self, node: Optional[NodeItem]) -> None:
         """Set the node currently being edited."""
         self.current_node = node
+        self.current_connection = None
+        self.arrow_start_btn.hide()
+        self.arrow_end_btn.hide()
+        self.enable_node_controls(node is not None)
         if node is None:
             self.label_edit.setText("")
+            self.font_combo.setCurrentFont(QFont("Verdana"))
             self.font_size_spin.setValue(12)
+            self.bold_check.setChecked(False)
             self.border_thick_spin.setValue(1)
             self.fill_btn.setStyleSheet("")
             self.border_btn.setStyleSheet("")
             return
         # Populate fields
         self.label_edit.setText(node.data.label)
+        self.font_combo.setCurrentFont(QFont(node.data.font_family))
         self.font_size_spin.setValue(int(node.data.font_size))
+        self.bold_check.setChecked(getattr(node.data, "font_bold", False))
         self.border_thick_spin.setValue(int(node.data.border_width))
         # Set button colours
         self.fill_btn.setStyleSheet(f"background-color: {node.data.fill_color}")
         self.border_btn.setStyleSheet(f"background-color: {node.data.border_color}")
+
+    def set_connection(self, conn: Optional[ConnectionItem]) -> None:
+        self.current_connection = conn
+        self.current_node = None
+        self.enable_node_controls(False)
+        if conn is None:
+            self.arrow_start_btn.hide()
+            self.arrow_end_btn.hide()
+            return
+        self.arrow_start_btn.show()
+        self.arrow_end_btn.show()
+        self.arrow_start_btn.setChecked(conn.arrow_start)
+        self.arrow_end_btn.setChecked(conn.arrow_end)
+
+    def enable_node_controls(self, enable: bool) -> None:
+        for widget in (
+            self.label_edit,
+            self.font_combo,
+            self.font_size_spin,
+            self.bold_check,
+            self.fill_btn,
+            self.border_btn,
+            self.border_thick_spin,
+        ):
+            widget.setEnabled(enable)
 
     def choose_fill_color(self):
         if self.current_node is None:
@@ -1018,22 +1108,32 @@ class StyleEditor(QWidget):
             self.current_node.update()
 
     def apply_changes(self):
-        if self.current_node is None:
-            return
-        # Apply label
-        text = self.label_edit.text()
-        if text:
-            self.current_node.data.label = text
-        # Font size
-        self.current_node.data.font_size = self.font_size_spin.value()
-        # Border thickness
-        self.current_node.data.border_width = self.border_thick_spin.value()
-        # Update visuals
-        self.current_node.update()
-        self.current_node._update_bounds()
-        # Update connections (in case size changed)
-        for conn in self.current_node.connections:
-            conn.update_position()
+        editor = self.parent()
+        if isinstance(editor, ConceptMapEditor):
+            editor.push_undo_state()
+        if self.current_node is not None:
+            # Apply label
+            text = self.label_edit.text()
+            if text:
+                self.current_node.data.label = text
+            # Font options
+            self.current_node.data.font_family = self.font_combo.currentFont().family()
+            self.current_node.data.font_size = self.font_size_spin.value()
+            self.current_node.data.font_bold = self.bold_check.isChecked()
+            # Border thickness
+            self.current_node.data.border_width = self.border_thick_spin.value()
+            # Update visuals
+            self.current_node.update()
+            self.current_node._update_bounds()
+            # Update connections (in case size changed)
+            for conn in self.current_node.connections:
+                conn.update_position()
+        elif self.current_connection is not None:
+            self.current_connection.arrow_start = self.arrow_start_btn.isChecked()
+            self.current_connection.arrow_end = self.arrow_end_btn.isChecked()
+            self.current_connection.update()
+        if isinstance(editor, ConceptMapEditor):
+            editor.update_model_from_scene()
 
 
 class ConceptMapEditor(QMainWindow):
@@ -1068,6 +1168,11 @@ class ConceptMapEditor(QMainWindow):
         # Scene events
         self.scene.setBackgroundBrush(QBrush(QColor("#F5F5F5")))
         self.scene.mouseDoubleClickEvent = self.scene_double_click
+        self.scene.selectionChanged.connect(self.selection_changed)
+        # Undo/redo stacks
+        self.undo_stack: List[CXLDocument] = []
+        self.redo_stack: List[CXLDocument] = []
+        self.push_undo_state()
 
     def _create_actions(self) -> None:
         self.new_act = QAction("Nuovo", self)
@@ -1190,21 +1295,130 @@ class ConceptMapEditor(QMainWindow):
             self.document.concepts[cid].fill_color = item.data.fill_color
             self.document.concepts[cid].border_color = item.data.border_color
             self.document.concepts[cid].border_width = item.data.border_width
+            self.document.concepts[cid].font_bold = getattr(item.data, "font_bold", False)
         # Update connections
         self.document.connections.clear()
         for conn_item in self.connection_items:
-            conn = ConnectionData(str(uuid.uuid4()), conn_item.source.data.id, conn_item.dest.data.id)
+            conn = ConnectionData(
+                str(uuid.uuid4()),
+                conn_item.source.data.id,
+                conn_item.dest.data.id,
+                conn_item.arrow_start,
+                conn_item.arrow_end,
+            )
             self.document.connections.append(conn)
 
     ###################
     # Scene interaction
     ###################
+
+    def push_undo_state(self) -> None:
+        self.undo_stack.append(copy.deepcopy(self.document))
+        self.redo_stack.clear()
+
+    def rebuild_scene_from_document(self) -> None:
+        self.clear_scene()
+        for cid, data in self.document.concepts.items():
+            item = NodeItem(data, self.scene)
+            item.request_connection.connect(self.handle_connection_request)
+            item.node_moved.connect(self.node_moved)
+            item.node_selected.connect(self.node_selected)
+            self.scene.addItem(item)
+            item.setPos(data.x, data.y)
+            self.node_items[cid] = item
+        for conn in self.document.connections:
+            src_item = self.node_items.get(conn.from_id)
+            dst_item = self.node_items.get(conn.to_id)
+            if src_item and dst_item:
+                conn_item = ConnectionItem(src_item, 0, dst_item, 0)
+                conn_item.arrow_start = conn.arrow_start
+                conn_item.arrow_end = conn.arrow_end
+                self.scene.addItem(conn_item)
+                self.connection_items.append(conn_item)
+
+    def undo(self) -> None:
+        if not self.undo_stack:
+            return
+        self.redo_stack.append(copy.deepcopy(self.document))
+        self.document = self.undo_stack.pop()
+        self.rebuild_scene_from_document()
+
+    def redo(self) -> None:
+        if not self.redo_stack:
+            return
+        self.undo_stack.append(copy.deepcopy(self.document))
+        self.document = self.redo_stack.pop()
+        self.rebuild_scene_from_document()
+
+    def delete_selected(self) -> None:
+        items = list(self.scene.selectedItems())
+        if not items:
+            return
+        self.push_undo_state()
+        for item in items:
+            if isinstance(item, NodeItem):
+                cid = item.data.id
+                if item.data.is_linker:
+                    related = [c for c in self.document.connections if c.from_id == cid or c.to_id == cid]
+                    if len(related) == 2:
+                        source_id = dest_id = None
+                        for c in related:
+                            if c.to_id == cid:
+                                source_id = c.from_id
+                            elif c.from_id == cid:
+                                dest_id = c.to_id
+                        self.document.connections = [c for c in self.document.connections if c not in related]
+                        if source_id and dest_id:
+                            self.document.connections.append(ConnectionData(str(uuid.uuid4()), source_id, dest_id))
+                else:
+                    self.document.connections = [c for c in self.document.connections if c.from_id != cid and c.to_id != cid]
+                self.document.concepts.pop(cid, None)
+            elif isinstance(item, ConnectionItem):
+                self.document.connections = [
+                    c for c in self.document.connections
+                    if not (c.from_id == item.source.data.id and c.to_id == item.dest.data.id)
+                ]
+        self.rebuild_scene_from_document()
+
+    def selection_changed(self) -> None:
+        items = self.scene.selectedItems()
+        if len(items) == 1:
+            item = items[0]
+            if isinstance(item, NodeItem) and not item.data.is_linker:
+                self.style_editor.set_node(item)
+                self.style_editor.set_connection(None)
+                self.dock.show()
+            elif isinstance(item, ConnectionItem):
+                self.style_editor.set_node(None)
+                self.style_editor.set_connection(item)
+                self.dock.show()
+            else:
+                self.style_editor.set_node(None)
+                self.style_editor.set_connection(None)
+                self.dock.hide()
+        else:
+            self.style_editor.set_node(None)
+            self.style_editor.set_connection(None)
+            self.dock.hide()
+
+    def keyPressEvent(self, event) -> None:
+        if event.matches(QKeySequence.Undo):
+            self.undo()
+            return
+        if event.matches(QKeySequence.Redo):
+            self.redo()
+            return
+        if event.key() == Qt.Key_Backspace:
+            self.delete_selected()
+            return
+        super().keyPressEvent(event)
     def scene_double_click(self, event) -> None:
         """Handle double click on scene to create new concept."""
         # Determine if click on empty area
         pos = event.scenePos()
         item = self.scene.itemAt(pos, self.view.transform())
         if item is None:
+            self.push_undo_state()
             # Create new concept data
             cid = str(uuid.uuid4())
             style = self.document.default_linker_style if False else self.document.default_concept_style
@@ -1229,6 +1443,7 @@ class ConceptMapEditor(QMainWindow):
             self.scene.addItem(item)
             item.setPos(pos)
             self.node_items[cid] = item
+            self.update_model_from_scene()
             event.accept()
             return
         # Otherwise default
@@ -1269,7 +1484,7 @@ class ConceptMapEditor(QMainWindow):
                 self.temp_new_node.node_selected.connect(self.node_selected)
                 self.scene.addItem(self.temp_new_node)
                 self.temp_new_node.setPos(pos)
-                self.temp_connection = ConnectionItem(source_node, 0, self.temp_new_node, 1)
+                self.temp_connection = ConnectionItem(source_node, 0, self.temp_new_node, 0)
                 self.scene.addItem(self.temp_connection)
             else:
                 self.temp_new_node.setPos(pos)
@@ -1282,13 +1497,17 @@ class ConceptMapEditor(QMainWindow):
             if self.temp_new_node is not None:
                 if isinstance(dest_item, NodeItem) and dest_item not in (source_node, self.temp_new_node):
                     # Connecting to existing node
+                    self.push_undo_state()
                     if self.temp_connection:
                         self.scene.removeItem(self.temp_connection)
                         self.temp_connection = None
                     self.scene.removeItem(self.temp_new_node)
                     self.temp_new_node = None
-                    modifiers = QApplication.keyboardModifiers()
-                    use_linker = not (modifiers & Qt.ShiftModifier)
+                    if dest_item.data.is_linker or source_node.data.is_linker:
+                        use_linker = False
+                    else:
+                        modifiers = QApplication.keyboardModifiers()
+                        use_linker = not (modifiers & Qt.ShiftModifier)
                     if use_linker:
                         lid = str(uuid.uuid4())
                         style = self.document.default_linker_style if self.document.default_linker_style else self.document.default_concept_style
@@ -1312,15 +1531,16 @@ class ConceptMapEditor(QMainWindow):
                         linker_item.node_selected.connect(self.node_selected)
                         self.scene.addItem(linker_item)
                         self.node_items[lid] = linker_item
-                        conn1 = ConnectionItem(source_node, 0, linker_item, 1)
-                        conn2 = ConnectionItem(linker_item, 0, dest_item, 1)
+                        conn1 = ConnectionItem(source_node, 0, linker_item, 0)
+                        conn2 = ConnectionItem(linker_item, 1, dest_item, 0)
                         self.scene.addItem(conn1)
                         self.scene.addItem(conn2)
                         self.connection_items.extend([conn1, conn2])
                     else:
-                        conn = ConnectionItem(source_node, 0, dest_item, 1)
+                        conn = ConnectionItem(source_node, 0, dest_item, 0)
                         self.scene.addItem(conn)
                         self.connection_items.append(conn)
+                    self.update_model_from_scene()
                     return
                 # Finalise new concept
                 cid = str(uuid.uuid4())
@@ -1329,8 +1549,11 @@ class ConceptMapEditor(QMainWindow):
                 self.temp_new_node.data.y = pos.y()
                 self.document.concepts[cid] = self.temp_new_node.data
                 self.node_items[cid] = self.temp_new_node
-                modifiers = QApplication.keyboardModifiers()
-                use_linker = not (modifiers & Qt.ShiftModifier)
+                if source_node.data.is_linker:
+                    use_linker = False
+                else:
+                    modifiers = QApplication.keyboardModifiers()
+                    use_linker = not (modifiers & Qt.ShiftModifier)
                 if use_linker:
                     lid = str(uuid.uuid4())
                     style_l = self.document.default_linker_style if self.document.default_linker_style else self.document.default_concept_style
@@ -1356,8 +1579,8 @@ class ConceptMapEditor(QMainWindow):
                     self.node_items[lid] = linker_item2
                     if self.temp_connection:
                         self.scene.removeItem(self.temp_connection)
-                    conn1 = ConnectionItem(source_node, 0, linker_item2, 1)
-                    conn2 = ConnectionItem(linker_item2, 0, self.temp_new_node, 1)
+                    conn1 = ConnectionItem(source_node, 0, linker_item2, 0)
+                    conn2 = ConnectionItem(linker_item2, 1, self.temp_new_node, 0)
                     self.scene.addItem(conn1)
                     self.scene.addItem(conn2)
                     self.connection_items.extend([conn1, conn2])
@@ -1365,16 +1588,21 @@ class ConceptMapEditor(QMainWindow):
                     if self.temp_connection:
                         self.connection_items.append(self.temp_connection)
                     else:
-                        conn = ConnectionItem(source_node, 0, self.temp_new_node, 1)
+                        conn = ConnectionItem(source_node, 0, self.temp_new_node, 0)
                         self.scene.addItem(conn)
                         self.connection_items.append(conn)
                 self.temp_new_node = None
                 self.temp_connection = None
+                self.update_model_from_scene()
                 return
             # No temp node: maybe connecting existing nodes directly
             if isinstance(dest_item, NodeItem) and dest_item is not source_node:
-                modifiers = QApplication.keyboardModifiers()
-                use_linker = not (modifiers & Qt.ShiftModifier)
+                self.push_undo_state()
+                if dest_item.data.is_linker or source_node.data.is_linker:
+                    use_linker = False
+                else:
+                    modifiers = QApplication.keyboardModifiers()
+                    use_linker = not (modifiers & Qt.ShiftModifier)
                 if use_linker:
                     lid = str(uuid.uuid4())
                     style = self.document.default_linker_style if self.document.default_linker_style else self.document.default_concept_style
@@ -1398,15 +1626,16 @@ class ConceptMapEditor(QMainWindow):
                     linker_item.node_selected.connect(self.node_selected)
                     self.scene.addItem(linker_item)
                     self.node_items[lid] = linker_item
-                    conn1 = ConnectionItem(source_node, 0, linker_item, 1)
-                    conn2 = ConnectionItem(linker_item, 0, dest_item, 1)
+                    conn1 = ConnectionItem(source_node, 0, linker_item, 0)
+                    conn2 = ConnectionItem(linker_item, 1, dest_item, 0)
                     self.scene.addItem(conn1)
                     self.scene.addItem(conn2)
                     self.connection_items.extend([conn1, conn2])
                 else:
-                    conn = ConnectionItem(source_node, 0, dest_item, 1)
+                    conn = ConnectionItem(source_node, 0, dest_item, 0)
                     self.scene.addItem(conn)
                     self.connection_items.append(conn)
+                self.update_model_from_scene()
             return
 
     def node_moved(self, node: NodeItem) -> None:
@@ -1414,14 +1643,7 @@ class ConceptMapEditor(QMainWindow):
         pass
 
     def node_selected(self, node: NodeItem) -> None:
-        """Handle node selection: open style editor for concept nodes."""
-        # Only show style editor for concepts (not linking phrases)
-        if node.data.is_linker:
-            self.style_editor.set_node(None)
-            self.dock.hide()
-            return
-        self.style_editor.set_node(node)
-        self.dock.show()
+        self.selection_changed()
 
 
 class StartupDialog(QDialog):
