@@ -742,12 +742,41 @@ class NodeItem(QGraphicsObject):
         """Return available anchor points on the node for connections."""
         w = self.data.width
         h = self.data.height
-        return [
-            QPointF(w / 2, 0),            # top
-            QPointF(w / 2, h),            # bottom
-            QPointF(0, h / 2),            # left
-            QPointF(w, h / 2),            # right
+        anchors: List[QPointF] = [
+            QPointF(w / 2, 0),            # top centre (default)
+            QPointF(w / 2, h),            # bottom centre (default)
+            QPointF(0, h / 2),            # left centre (default)
+            QPointF(w, h / 2),            # right centre (default)
         ]
+
+        # Additional evenly spaced anchors along each side to allow
+        # finer control when reassigning connection lines. We add two
+        # extra points per side plus the four corners, giving five
+        # hotspots per side (corners are shared).
+        step_w = w / 3
+        step_h = h / 3
+
+        for i in (1, 2):  # interior points on top and bottom edges
+            x = step_w * i
+            anchors.append(QPointF(x, 0))
+            anchors.append(QPointF(x, h))
+
+        # Corners
+        anchors.extend(
+            [
+                QPointF(0, 0),
+                QPointF(w, 0),
+                QPointF(0, h),
+                QPointF(w, h),
+            ]
+        )
+
+        for i in (1, 2):  # interior points on left and right edges
+            y = step_h * i
+            anchors.append(QPointF(0, y))
+            anchors.append(QPointF(w, y))
+
+        return anchors
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
@@ -1156,7 +1185,7 @@ class ConceptMapEditor(QMainWindow):
         self.dock = QDockWidget("Proprietà", self)
         self.dock.setWidget(self.style_editor)
         self.addDockWidget(Qt.RightDockWidgetArea, self.dock)
-        self.dock.hide()
+        self.dock.show()
         # Actions and menu
         self._create_actions()
         self._create_menu()
@@ -1203,7 +1232,7 @@ class ConceptMapEditor(QMainWindow):
         self.node_items.clear()
         self.connection_items.clear()
         self.style_editor.set_node(None)
-        self.dock.hide()
+        self.style_editor.set_connection(None)
 
     def new_file(self) -> None:
         """Create a new blank map."""
@@ -1395,11 +1424,11 @@ class ConceptMapEditor(QMainWindow):
             else:
                 self.style_editor.set_node(None)
                 self.style_editor.set_connection(None)
-                self.dock.hide()
+                self.dock.show()
         else:
             self.style_editor.set_node(None)
             self.style_editor.set_connection(None)
-            self.dock.hide()
+            self.dock.show()
 
     def keyPressEvent(self, event) -> None:
         if event.matches(QKeySequence.Undo):
