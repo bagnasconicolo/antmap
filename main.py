@@ -10,7 +10,8 @@ interface.
 Features:
 
 * **Double click** on empty canvas creates a new concept at that
-  location with a text label.  A dialog prompts for the label.
+  location with the default label "????".  Double clicking an existing
+  concept or linking phrase allows editing its text inline.
 
 * Each concept has a small **resize handle** in its bottom right
   corner.  Drag this handle to resize the concept; resizing is
@@ -18,16 +19,11 @@ Features:
   bounding box.
 
 * Each concept also has a **connection handle** at its top centre.
-  Dragging this handle will start a connection.  When the drag ends:
-  - If released over an existing concept, a connection is made
-    between the two concepts.  If the **Shift** key is held during
-    this operation, the connection is direct.  Otherwise, a
-    linking phrase is created with a default label (prompted via
-    dialog) and connected accordingly.
-  - If released over empty space, a new concept is created at the
-    drop location and connected from the original concept.  The
-    Shift modifier similarly controls whether a linking phrase is
-    inserted.
+  Dragging this handle drags out a new concept that follows the cursor.
+  Releasing over an existing concept creates a connection; releasing in
+  empty space drops the new concept there.  If the **Shift** key is held
+  during release, the connection is direct.  Otherwise, a linking phrase
+  with default label "????" is inserted between the concepts.
 
 * **Dragging** a concept moves it around the canvas; all attached
   connections update dynamically.
@@ -68,6 +64,7 @@ from PyQt5.QtCore import (
     QRectF,
     QPointF,
     pyqtSignal,
+    QEvent,
 )
 from PyQt5.QtGui import (
     QColor,
@@ -76,6 +73,7 @@ from PyQt5.QtGui import (
     QFont,
     QFontMetrics,
     QPainter,
+    QTextCursor,
 )
 from PyQt5.QtWidgets import (
     QApplication,
@@ -98,7 +96,6 @@ from PyQt5.QtWidgets import (
     QSpinBox,
     QColorDialog,
     QFileDialog,
-    QInputDialog,
     QDialog,
     QAction,
     QMenu,
@@ -609,6 +606,28 @@ class AnchorHandle(QGraphicsEllipseItem):
         super().mouseReleaseEvent(event)
 
 
+class EditableTextItem(QGraphicsTextItem):
+    """Text item that commits edits back to its owning node."""
+
+    def __init__(self, node: 'NodeItem') -> None:
+        super().__init__(node.data.label, node)
+        self.node = node
+        self.setDefaultTextColor(QColor(node.data.font_color))
+        self.setFont(QFont(node.data.font_family, int(node.data.font_size)))
+        self.setTextInteractionFlags(Qt.NoTextInteraction)
+
+    def focusOutEvent(self, event) -> None:
+        self.setTextInteractionFlags(Qt.NoTextInteraction)
+        self.node.finish_editing(self.toPlainText())
+        super().focusOutEvent(event)
+
+    def keyPressEvent(self, event) -> None:
+        if event.key() in (Qt.Key_Return, Qt.Key_Enter):
+            self.clearFocus()
+        else:
+            super().keyPressEvent(event)
+
+
 class NodeItem(QGraphicsObject):
     """Graphical representation of a concept or linking phrase."""
 
@@ -626,16 +645,13 @@ class NodeItem(QGraphicsObject):
         self.setFlag(QGraphicsItem.ItemIsMovable, True)
         self.setFlag(QGraphicsItem.ItemSendsGeometryChanges, True)
         # Children: label item
-        self.label_item = QGraphicsTextItem(self.data.label, self)
-        self.label_item.setDefaultTextColor(QColor(self.data.font_color))
-        self.label_item.setFont(QFont(self.data.font_family, int(self.data.font_size)))
+        self.label_item = EditableTextItem(self)
         # Resizing handle (bottom right)
         self.handle_size = 8
         self.resizing = False
         # Connection handle (top centre)
         self.connection_handle_size = 10
         self.dragging_connection = False
-        self.connection_preview: Optional[QGraphicsLineItem] = None
         # Connections list
         self.connections: List['ConnectionItem'] = []
         # Set initial position
@@ -727,13 +743,6 @@ class NodeItem(QGraphicsObject):
             elif ch_rect.contains(pos):
                 # Start connection drag
                 self.dragging_connection = True
-                # Create a preview line
-                self.connection_preview = QGraphicsLineItem()
-                pen = QPen(QColor("#000000"))
-                pen.setStyle(Qt.DashLine)
-                self.connection_preview.setPen(pen)
-                self.scene_ref.addItem(self.connection_preview)
-                self.connection_preview.setZValue(-1000)
                 self.request_connection.emit(self, event)
                 event.accept()
                 return
@@ -764,12 +773,9 @@ class NodeItem(QGraphicsObject):
             for conn in self.connections:
                 conn.update_position()
             return
-        elif self.dragging_connection and self.connection_preview is not None:
-            # Update preview line
-            line = self.connection_preview.line()
-            p0 = self.mapToScene(self.anchor_positions()[0])  # top anchor as start
-            p1 = event.scenePos()
-            self.connection_preview.setLine(p0.x(), p0.y(), p1.x(), p1.y())
+        elif self.dragging_connection:
+            # Inform editor of drag movement
+            self.request_connection.emit(self, event)
             return
         else:
             super().mouseMoveEvent(event)
@@ -784,11 +790,7 @@ class NodeItem(QGraphicsObject):
             return
         elif self.dragging_connection:
             # End connection drag: let the scene handle creation
-            if self.connection_preview is not None:
-                self.scene_ref.removeItem(self.connection_preview)
-                self.connection_preview = None
             self.dragging_connection = False
-            # Inform scene of drop
             self.request_connection.emit(self, event)
             event.accept()
             return
@@ -806,6 +808,25 @@ class NodeItem(QGraphicsObject):
             # Notify editor
             self.node_moved.emit(self)
         return super().itemChange(change, value)
+
+    def mouseDoubleClickEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.label_item.setTextInteractionFlags(Qt.TextEditorInteraction)
+            self.label_item.setFocus(Qt.MouseFocusReason)
+            cursor = self.label_item.textCursor()
+            cursor.select(QTextCursor.Document)
+            self.label_item.setTextCursor(cursor)
+            event.accept()
+            return
+        super().mouseDoubleClickEvent(event)
+
+    def finish_editing(self, text: str) -> None:
+        new_text = text.strip() or "????"
+        self.data.label = new_text
+        self._update_bounds()
+        self.update()
+        for conn in self.connections:
+            conn.update_position()
 
 
 class ConnectionItem(QGraphicsLineItem):
@@ -998,6 +1019,8 @@ class ConceptMapEditor(QMainWindow):
         # Map state
         self.node_items: Dict[str, NodeItem] = {}
         self.connection_items: List[ConnectionItem] = []
+        self.temp_new_node: Optional[NodeItem] = None
+        self.temp_connection: Optional[ConnectionItem] = None
         # Scene events
         self.scene.setBackgroundBrush(QBrush(QColor("#F5F5F5")))
         self.scene.mouseDoubleClickEvent = self.scene_double_click
@@ -1138,15 +1161,11 @@ class ConceptMapEditor(QMainWindow):
         pos = event.scenePos()
         item = self.scene.itemAt(pos, self.view.transform())
         if item is None:
-            # Prompt for label
-            text, ok = QInputDialog.getText(self, "Nuovo concetto", "Etichetta del concetto:")
-            if not ok or not text:
-                return
             # Create new concept data
             cid = str(uuid.uuid4())
             style = self.document.default_linker_style if False else self.document.default_concept_style
             data = ConceptData(
-                cid, text,
+                cid, "????",
                 pos.x(), pos.y(),
                 120, 60,
                 font_family=style.get("font-name", "Verdana"),
@@ -1172,129 +1191,179 @@ class ConceptMapEditor(QMainWindow):
         QGraphicsScene.mouseDoubleClickEvent(self.scene, event)
 
     def handle_connection_request(self, source_node: NodeItem, event) -> None:
-        """Handle the start and end of a connection drag."""
-        if event.type() == 2:  # MouseMove
-            # Nothing to do here; preview handled inside node
+        """Handle interactive creation of connections and new concepts."""
+        etype = event.type()
+        if etype == QEvent.GraphicsSceneMousePress:
+            # Reset any temporary items
+            if self.temp_new_node is not None:
+                self.scene.removeItem(self.temp_new_node)
+                self.temp_new_node = None
+            if self.temp_connection is not None:
+                self.scene.removeItem(self.temp_connection)
+                self.temp_connection = None
             return
-        # On release: determine destination
-        pos = event.scenePos()
-        dest_item = self.scene.itemAt(pos, self.view.transform())
-        # If dest_item is NodeItem (and not the same) => connect
-        if isinstance(dest_item, NodeItem) and dest_item is not source_node:
-            # Determine if shift pressed
-            modifiers = QApplication.keyboardModifiers()
-            use_linker = not (modifiers & Qt.ShiftModifier)
-            if use_linker:
-                # Prompt for linking phrase label
-                text, ok = QInputDialog.getText(self, "Nuova frase-legame", "Etichetta della frase-legame:")
-                if not ok or not text:
-                    text = ""
-                # Create linking phrase node
-                lid = str(uuid.uuid4())
-                style = self.document.default_linker_style if self.document.default_linker_style else self.document.default_concept_style
+        if etype == QEvent.GraphicsSceneMouseMove:
+            pos = event.scenePos()
+            if self.temp_new_node is None:
+                # Start dragging a new concept
+                style = self.document.default_concept_style
                 data = ConceptData(
-                    lid, text,
-                    (source_node.pos().x() + dest_item.pos().x()) / 2,
-                    (source_node.pos().y() + dest_item.pos().y()) / 2,
-                    90, 20,
+                    "temp", "????",
+                    pos.x(), pos.y(),
+                    120, 60,
                     font_family=style.get("font-name", "Verdana"),
                     font_size=float(style.get("font-size", "12")),
                     font_color=self.document._parse_color(style.get("font-color", "0,0,0,255")),
                     fill_color=self.document._parse_color(style.get("background-color", "237,244,246,255")),
                     border_color=self.document._parse_color(style.get("border-color", "0,0,0,255")),
                     border_width=float(style.get("border-thickness", "1")),
-                    is_linker=True
+                    is_linker=False
                 )
-                self.document.concepts[lid] = data
-                linker_item = NodeItem(data, self.scene)
-                linker_item.request_connection.connect(self.handle_connection_request)
-                linker_item.node_moved.connect(self.node_moved)
-                linker_item.node_selected.connect(self.node_selected)
-                self.scene.addItem(linker_item)
-                self.node_items[lid] = linker_item
-                # Create connections
-                conn1 = ConnectionItem(source_node, 0, linker_item, 1)
-                conn2 = ConnectionItem(linker_item, 0, dest_item, 1)
-                self.scene.addItem(conn1)
-                self.scene.addItem(conn2)
-                self.connection_items.extend([conn1, conn2])
+                self.temp_new_node = NodeItem(data, self.scene)
+                self.temp_new_node.request_connection.connect(self.handle_connection_request)
+                self.temp_new_node.node_moved.connect(self.node_moved)
+                self.temp_new_node.node_selected.connect(self.node_selected)
+                self.scene.addItem(self.temp_new_node)
+                self.temp_new_node.setPos(pos)
+                self.temp_connection = ConnectionItem(source_node, 0, self.temp_new_node, 1)
+                self.scene.addItem(self.temp_connection)
             else:
-                # Direct connection
-                conn = ConnectionItem(source_node, 0, dest_item, 1)
-                self.scene.addItem(conn)
-                self.connection_items.append(conn)
-            # Update model connection list
-            # Note: Document connections will be updated on save
+                self.temp_new_node.setPos(pos)
+                if self.temp_connection:
+                    self.temp_connection.update_position()
             return
-        # If no destination: create new concept
-        # Prompt for new concept label
-        text, ok = QInputDialog.getText(self, "Nuovo concetto", "Etichetta del concetto:")
-        if not ok or not text:
+        if etype == QEvent.GraphicsSceneMouseRelease:
+            pos = event.scenePos()
+            dest_item = self.scene.itemAt(pos, self.view.transform())
+            if self.temp_new_node is not None:
+                if isinstance(dest_item, NodeItem) and dest_item not in (source_node, self.temp_new_node):
+                    # Connecting to existing node
+                    if self.temp_connection:
+                        self.scene.removeItem(self.temp_connection)
+                        self.temp_connection = None
+                    self.scene.removeItem(self.temp_new_node)
+                    self.temp_new_node = None
+                    modifiers = QApplication.keyboardModifiers()
+                    use_linker = not (modifiers & Qt.ShiftModifier)
+                    if use_linker:
+                        lid = str(uuid.uuid4())
+                        style = self.document.default_linker_style if self.document.default_linker_style else self.document.default_concept_style
+                        data = ConceptData(
+                            lid, "????",
+                            (source_node.pos().x() + dest_item.pos().x()) / 2,
+                            (source_node.pos().y() + dest_item.pos().y()) / 2,
+                            90, 20,
+                            font_family=style.get("font-name", "Verdana"),
+                            font_size=float(style.get("font-size", "12")),
+                            font_color=self.document._parse_color(style.get("font-color", "0,0,0,255")),
+                            fill_color=self.document._parse_color(style.get("background-color", "237,244,246,255")),
+                            border_color=self.document._parse_color(style.get("border-color", "0,0,0,255")),
+                            border_width=float(style.get("border-thickness", "1")),
+                            is_linker=True
+                        )
+                        self.document.concepts[lid] = data
+                        linker_item = NodeItem(data, self.scene)
+                        linker_item.request_connection.connect(self.handle_connection_request)
+                        linker_item.node_moved.connect(self.node_moved)
+                        linker_item.node_selected.connect(self.node_selected)
+                        self.scene.addItem(linker_item)
+                        self.node_items[lid] = linker_item
+                        conn1 = ConnectionItem(source_node, 0, linker_item, 1)
+                        conn2 = ConnectionItem(linker_item, 0, dest_item, 1)
+                        self.scene.addItem(conn1)
+                        self.scene.addItem(conn2)
+                        self.connection_items.extend([conn1, conn2])
+                    else:
+                        conn = ConnectionItem(source_node, 0, dest_item, 1)
+                        self.scene.addItem(conn)
+                        self.connection_items.append(conn)
+                    return
+                # Finalise new concept
+                cid = str(uuid.uuid4())
+                self.temp_new_node.data.id = cid
+                self.temp_new_node.data.x = pos.x()
+                self.temp_new_node.data.y = pos.y()
+                self.document.concepts[cid] = self.temp_new_node.data
+                self.node_items[cid] = self.temp_new_node
+                modifiers = QApplication.keyboardModifiers()
+                use_linker = not (modifiers & Qt.ShiftModifier)
+                if use_linker:
+                    lid = str(uuid.uuid4())
+                    style_l = self.document.default_linker_style if self.document.default_linker_style else self.document.default_concept_style
+                    ldata = ConceptData(
+                        lid, "????",
+                        (source_node.pos().x() + self.temp_new_node.pos().x()) / 2,
+                        (source_node.pos().y() + self.temp_new_node.pos().y()) / 2,
+                        90, 20,
+                        font_family=style_l.get("font-name", "Verdana"),
+                        font_size=float(style_l.get("font-size", "12")),
+                        font_color=self.document._parse_color(style_l.get("font-color", "0,0,0,255")),
+                        fill_color=self.document._parse_color(style_l.get("background-color", "237,244,246,255")),
+                        border_color=self.document._parse_color(style_l.get("border-color", "0,0,0,255")),
+                        border_width=float(style_l.get("border-thickness", "1")),
+                        is_linker=True
+                    )
+                    self.document.concepts[lid] = ldata
+                    linker_item2 = NodeItem(ldata, self.scene)
+                    linker_item2.request_connection.connect(self.handle_connection_request)
+                    linker_item2.node_moved.connect(self.node_moved)
+                    linker_item2.node_selected.connect(self.node_selected)
+                    self.scene.addItem(linker_item2)
+                    self.node_items[lid] = linker_item2
+                    if self.temp_connection:
+                        self.scene.removeItem(self.temp_connection)
+                    conn1 = ConnectionItem(source_node, 0, linker_item2, 1)
+                    conn2 = ConnectionItem(linker_item2, 0, self.temp_new_node, 1)
+                    self.scene.addItem(conn1)
+                    self.scene.addItem(conn2)
+                    self.connection_items.extend([conn1, conn2])
+                else:
+                    if self.temp_connection:
+                        self.connection_items.append(self.temp_connection)
+                    else:
+                        conn = ConnectionItem(source_node, 0, self.temp_new_node, 1)
+                        self.scene.addItem(conn)
+                        self.connection_items.append(conn)
+                self.temp_new_node = None
+                self.temp_connection = None
+                return
+            # No temp node: maybe connecting existing nodes directly
+            if isinstance(dest_item, NodeItem) and dest_item is not source_node:
+                modifiers = QApplication.keyboardModifiers()
+                use_linker = not (modifiers & Qt.ShiftModifier)
+                if use_linker:
+                    lid = str(uuid.uuid4())
+                    style = self.document.default_linker_style if self.document.default_linker_style else self.document.default_concept_style
+                    data = ConceptData(
+                        lid, "????",
+                        (source_node.pos().x() + dest_item.pos().x()) / 2,
+                        (source_node.pos().y() + dest_item.pos().y()) / 2,
+                        90, 20,
+                        font_family=style.get("font-name", "Verdana"),
+                        font_size=float(style.get("font-size", "12")),
+                        font_color=self.document._parse_color(style.get("font-color", "0,0,0,255")),
+                        fill_color=self.document._parse_color(style.get("background-color", "237,244,246,255")),
+                        border_color=self.document._parse_color(style.get("border-color", "0,0,0,255")),
+                        border_width=float(style.get("border-thickness", "1")),
+                        is_linker=True
+                    )
+                    self.document.concepts[lid] = data
+                    linker_item = NodeItem(data, self.scene)
+                    linker_item.request_connection.connect(self.handle_connection_request)
+                    linker_item.node_moved.connect(self.node_moved)
+                    linker_item.node_selected.connect(self.node_selected)
+                    self.scene.addItem(linker_item)
+                    self.node_items[lid] = linker_item
+                    conn1 = ConnectionItem(source_node, 0, linker_item, 1)
+                    conn2 = ConnectionItem(linker_item, 0, dest_item, 1)
+                    self.scene.addItem(conn1)
+                    self.scene.addItem(conn2)
+                    self.connection_items.extend([conn1, conn2])
+                else:
+                    conn = ConnectionItem(source_node, 0, dest_item, 1)
+                    self.scene.addItem(conn)
+                    self.connection_items.append(conn)
             return
-        # Create new node
-        cid = str(uuid.uuid4())
-        style = self.document.default_concept_style
-        data = ConceptData(
-            cid, text,
-            pos.x(), pos.y(),
-            120, 60,
-            font_family=style.get("font-name", "Verdana"),
-            font_size=float(style.get("font-size", "12")),
-            font_color=self.document._parse_color(style.get("font-color", "0,0,0,255")),
-            fill_color=self.document._parse_color(style.get("background-color", "237,244,246,255")),
-            border_color=self.document._parse_color(style.get("border-color", "0,0,0,255")),
-            border_width=float(style.get("border-thickness", "1")),
-            is_linker=False
-        )
-        self.document.concepts[cid] = data
-        new_item = NodeItem(data, self.scene)
-        new_item.request_connection.connect(self.handle_connection_request)
-        new_item.node_moved.connect(self.node_moved)
-        new_item.node_selected.connect(self.node_selected)
-        self.scene.addItem(new_item)
-        new_item.setPos(pos)
-        self.node_items[cid] = new_item
-        # Connect from source to new concept
-        modifiers = QApplication.keyboardModifiers()
-        use_linker = not (modifiers & Qt.ShiftModifier)
-        if use_linker:
-            # Prompt for linking phrase label
-            text2, ok2 = QInputDialog.getText(self, "Nuova frase-legame", "Etichetta della frase-legame:")
-            if not ok2 or not text2:
-                text2 = ""
-            lid = str(uuid.uuid4())
-            style_l = self.document.default_linker_style if self.document.default_linker_style else self.document.default_concept_style
-            ldata = ConceptData(
-                lid, text2,
-                (source_node.pos().x() + new_item.pos().x()) / 2,
-                (source_node.pos().y() + new_item.pos().y()) / 2,
-                90, 20,
-                font_family=style_l.get("font-name", "Verdana"),
-                font_size=float(style_l.get("font-size", "12")),
-                font_color=self.document._parse_color(style_l.get("font-color", "0,0,0,255")),
-                fill_color=self.document._parse_color(style_l.get("background-color", "237,244,246,255")),
-                border_color=self.document._parse_color(style_l.get("border-color", "0,0,0,255")),
-                border_width=float(style_l.get("border-thickness", "1")),
-                is_linker=True
-            )
-            self.document.concepts[lid] = ldata
-            linker_item2 = NodeItem(ldata, self.scene)
-            linker_item2.request_connection.connect(self.handle_connection_request)
-            linker_item2.node_moved.connect(self.node_moved)
-            linker_item2.node_selected.connect(self.node_selected)
-            self.scene.addItem(linker_item2)
-            self.node_items[lid] = linker_item2
-            # Connections
-            conn1 = ConnectionItem(source_node, 0, linker_item2, 1)
-            conn2 = ConnectionItem(linker_item2, 0, new_item, 1)
-            self.scene.addItem(conn1)
-            self.scene.addItem(conn2)
-            self.connection_items.extend([conn1, conn2])
-        else:
-            # Direct connection
-            conn = ConnectionItem(source_node, 0, new_item, 1)
-            self.scene.addItem(conn)
-            self.connection_items.append(conn)
 
     def node_moved(self, node: NodeItem) -> None:
         """Update style editor when node moves; reserved for future use."""
