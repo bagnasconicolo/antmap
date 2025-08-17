@@ -781,7 +781,7 @@ class NodeItem(QGraphicsObject):
         for pos in self.anchor_positions():
             marker = QGraphicsEllipseItem(-3, -3, 6, 6, self)
             marker.setBrush(QBrush(QColor("#00AEEF")))
-            marker.setPen(Qt.NoPen)
+            marker.setPen(QPen(Qt.NoPen))
             marker.setZValue(1000)
             marker.setPos(pos)
             self._anchor_markers.append(marker)
