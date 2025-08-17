@@ -32,10 +32,9 @@ Features:
   endpoints.  Drag these handles to re-anchor the connection to
   different positions on the concept (top, bottom, left or right).
 
-* **Selection and style editing**: with a concept or connection
-  selected, press **Ctrl+E** to open a modal style editor dialog
-  where properties such as label, font, colours and border settings
-  can be adjusted.
+* **Selection and style editing**: a style panel is always visible;
+  select a concept or connection to enable editing of label, font,
+  colours and border settings.  Press **Ctrl+E** to focus the panel.
 
 * Supports loading existing CXL files in both the old style list
   format and the newer appearance-based format.  Saving will
@@ -114,6 +113,7 @@ from PyQt5.QtWidgets import (
     QCheckBox,
     QToolBar,
     QStyle,
+    QGraphicsBlurEffect,
 )
 from PyQt5.QtPrintSupport import QPrinter, QPrintDialog
 
@@ -1292,15 +1292,36 @@ class StyleDialog(QDialog):
         layout.addWidget(self.arrow_end_btn)
         button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         layout.addWidget(button_box)
-        button_box.accepted.connect(self.accept)
-        button_box.rejected.connect(self.reject)
+        button_box.accepted.connect(self.apply)
+        button_box.rejected.connect(self._init_values)
         self.font_color_btn.clicked.connect(self.choose_font_color)
         self.fill_btn.clicked.connect(self.choose_fill_color)
         self.border_btn.clicked.connect(self.choose_border_color)
         self._init_values()
 
+    def closeEvent(self, event):  # type: ignore[override]
+        event.ignore()
+
+    def update_selection(self, nodes: Optional[List[NodeItem]] = None,
+                         connections: Optional[List[ConnectionItem]] = None) -> None:
+        self.nodes = nodes or []
+        self.connections = connections or []
+        self.node = self.nodes[0] if self.nodes else None
+        self.connection = self.connections[0] if self.connections else None
+        self._init_values()
+
     def _init_values(self) -> None:
         if self.node:
+            self.label_edit.show()
+            self.font_combo.show()
+            self.font_size_spin.show()
+            self.bold_check.show()
+            self.italic_check.show()
+            self.underline_check.show()
+            self.font_color_btn.show()
+            self.fill_btn.show()
+            self.border_btn.show()
+            self.border_thick_spin.show()
             data = self.node.data
             self.label_edit.setText(data.label)
             self.font_combo.setCurrentFont(QFont(data.font_family))
@@ -1325,9 +1346,21 @@ class StyleDialog(QDialog):
             self.fill_btn.hide()
             self.border_btn.hide()
             self.border_thick_spin.hide()
+            self.arrow_start_btn.show()
+            self.arrow_end_btn.show()
             self.arrow_start_btn.setChecked(self.connection.arrow_start)
             self.arrow_end_btn.setChecked(self.connection.arrow_end)
         else:
+            self.label_edit.hide()
+            self.font_combo.hide()
+            self.font_size_spin.hide()
+            self.bold_check.hide()
+            self.italic_check.hide()
+            self.underline_check.hide()
+            self.font_color_btn.hide()
+            self.fill_btn.hide()
+            self.border_btn.hide()
+            self.border_thick_spin.hide()
             self.arrow_start_btn.hide()
             self.arrow_end_btn.hide()
 
@@ -1362,6 +1395,9 @@ class StyleDialog(QDialog):
                 n.update()
 
     def apply(self) -> None:
+        parent = self.parent()
+        if isinstance(parent, ConceptMapEditor):
+            parent.push_undo_state()
         if self.nodes:
             text = self.label_edit.text()
             for node in self.nodes:
@@ -1384,6 +1420,8 @@ class StyleDialog(QDialog):
                 conn.arrow_start = arrow_start
                 conn.arrow_end = arrow_end
                 conn.update()
+        if isinstance(parent, ConceptMapEditor):
+            parent.update_model_from_scene()
 
 class ConceptMapEditor(QMainWindow):
     """Main window for concept map editing."""
@@ -1409,6 +1447,10 @@ class ConceptMapEditor(QMainWindow):
         self._create_menu()
         self._create_toolbar()
         self.statusBar().showMessage("Pronto")
+        self.style_panel = StyleDialog(parent=self)
+        self.style_panel.setWindowModality(Qt.NonModal)
+        self.style_panel.show()
+        self._disable_style_panel()
         # Map state
         self.node_items: Dict[str, NodeItem] = {}
         self.connection_items: List[ConnectionItem] = []
@@ -1438,7 +1480,6 @@ class ConceptMapEditor(QMainWindow):
         self.autofit_act = QAction(style.standardIcon(QStyle.SP_BrowserReload), "Autofit", self)
         self.edit_style_act = QAction(style.standardIcon(QStyle.SP_DialogApplyButton), "Modifica stile", self)
         self.edit_style_act.setShortcut(QKeySequence("Ctrl+E"))
-        self.edit_style_act.setEnabled(False)
         self.edit_style_act.triggered.connect(self.edit_style)
         self.copy_act = QAction(style.standardIcon(QStyle.SP_FileDialogNewFolder), "Copia", self)
         self.copy_act.setShortcut(QKeySequence.Copy)
@@ -1642,22 +1683,8 @@ class ConceptMapEditor(QMainWindow):
             painter.end()
 
     def edit_style(self) -> None:
-        items = self.scene.selectedItems()
-        node_items = [i for i in items if isinstance(i, NodeItem)]
-        conn_items = [i for i in items if isinstance(i, ConnectionItem)]
-        dlg: Optional[StyleDialog] = None
-        if node_items and not conn_items:
-            dlg = StyleDialog(nodes=node_items, parent=self)
-        elif conn_items and not node_items:
-            dlg = StyleDialog(connections=conn_items, parent=self)
-        if dlg is None:
-            return
-        self.push_undo_state()
-        if dlg.exec_() == QDialog.Accepted:
-            dlg.apply()
-            self.update_model_from_scene()
-        else:
-            self.undo_stack.pop()
+        self.style_panel.raise_()
+        self.style_panel.activateWindow()
 
     def zoom_in(self) -> None:
         """Zoom into the scene."""
@@ -1881,7 +1908,24 @@ class ConceptMapEditor(QMainWindow):
             (len(node_items) >= 1 and not conn_items)
             or (len(conn_items) >= 1 and not node_items)
         )
-        self.edit_style_act.setEnabled(enable)
+        if enable:
+            self.style_panel.update_selection(node_items, conn_items)
+            self._enable_style_panel()
+        else:
+            self.style_panel.update_selection([], [])
+            self._disable_style_panel()
+
+    def _enable_style_panel(self) -> None:
+        self.style_panel.setEnabled(True)
+        self.style_panel.setGraphicsEffect(None)
+        self.style_panel.setWindowOpacity(1.0)
+
+    def _disable_style_panel(self) -> None:
+        self.style_panel.setEnabled(False)
+        blur = QGraphicsBlurEffect()
+        blur.setBlurRadius(5)
+        self.style_panel.setGraphicsEffect(blur)
+        self.style_panel.setWindowOpacity(0.5)
 
     def keyPressEvent(self, event) -> None:
         if event.matches(QKeySequence.Undo):
