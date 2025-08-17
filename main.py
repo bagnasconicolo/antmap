@@ -1448,7 +1448,8 @@ class ConceptMapEditor(QMainWindow):
         self.paste_act.triggered.connect(self.paste_selection)
         self.export_pdf_act = QAction(style.standardIcon(QStyle.SP_FileIcon), "Esporta PDF", self)
         self.export_pdf_act.triggered.connect(self.export_pdf)
-        self.print_act = QAction(style.standardIcon(QStyle.SP_PrinterIcon), "Stampa", self)
+        printer_pixmap = getattr(QStyle, "SP_PrinterIcon", QStyle.SP_FileIcon)
+        self.print_act = QAction(style.standardIcon(printer_pixmap), "Stampa", self)
         self.print_act.triggered.connect(self.print_map)
         # Connect actions
         self.new_act.triggered.connect(self.new_file)
