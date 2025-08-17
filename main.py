@@ -124,7 +124,8 @@ class ConceptData:
                  font_family: str = "Verdana", font_size: float = 12.0,
                  font_color: str = "0,0,0,255", fill_color: str = "237,244,246,255",
                  border_color: str = "0,0,0,255", border_width: float = 1.0,
-                 font_bold: bool = False, is_linker: bool = False) -> None:
+                 font_bold: bool = False, font_italic: bool = False,
+                 font_underline: bool = False, is_linker: bool = False) -> None:
         self.id = cid
         self.label = label
         self.x = x
@@ -138,6 +139,8 @@ class ConceptData:
         self.border_color = border_color
         self.border_width = border_width
         self.font_bold = font_bold
+        self.font_italic = font_italic
+        self.font_underline = font_underline
         self.is_linker = is_linker
 
 
@@ -266,6 +269,7 @@ class CXLDocument:
                         "font-name": c_style.get("font-name", "Verdana"),
                         "font-size": c_style.get("font-size", "12"),
                         "font-color": c_style.get("font-color", "0,0,0,255"),
+                        "font-style": c_style.get("font-style", "plain"),
                         "background-color": c_style.get("background-color", "237,244,246,255"),
                         "border-color": c_style.get("border-color", "0,0,0,255"),
                         "border-thickness": c_style.get("border-thickness", "1"),
@@ -276,6 +280,7 @@ class CXLDocument:
                         "font-name": l_style.get("font-name", "Verdana"),
                         "font-size": l_style.get("font-size", "12"),
                         "font-color": l_style.get("font-color", "0,0,0,255"),
+                        "font-style": l_style.get("font-style", "plain"),
                         "background-color": l_style.get("background-color", "0,0,255,0"),
                         "border-color": l_style.get("border-color", "0,0,0,0"),
                         "border-thickness": l_style.get("border-thickness", "1"),
@@ -295,6 +300,10 @@ class CXLDocument:
                     node.border_width = float(style.get("border-thickness", node.border_width))
                 except ValueError:
                     pass
+                style_str = style.get("font-style", "plain")
+                node.font_bold = "bold" in style_str
+                node.font_italic = "italic" in style_str
+                node.font_underline = "underline" in style_str
         else:
             # Old style list format
             # Parse concepts
@@ -341,6 +350,10 @@ class CXLDocument:
                         except ValueError:
                             pass
                         node.font_color = text.get("color", node.font_color)
+                        style_str = text.get("style", "")
+                        node.font_bold = "bold" in style_str
+                        node.font_italic = "italic" in style_str
+                        node.font_underline = "underline" in style_str
                     # shape
                     shape = style.find("shape")
                     if shape is not None:
@@ -499,6 +512,7 @@ class CXLDocument:
                 c_style.set("font-name", first_c.font_family)
                 c_style.set("font-size", str(int(first_c.font_size)))
                 c_style.set("font-color", self._color_to_rgba(first_c.font_color))
+                c_style.set("font-style", self._font_style_to_str(first_c))
                 c_style.set("background-color", self._color_to_rgba(first_c.fill_color))
                 c_style.set("border-color", self._color_to_rgba(first_c.border_color))
                 c_style.set("border-thickness", str(int(first_c.border_width)))
@@ -507,6 +521,7 @@ class CXLDocument:
                 l_style.set("font-name", first_l.font_family)
                 l_style.set("font-size", str(int(first_l.font_size)))
                 l_style.set("font-color", self._color_to_rgba(first_l.font_color))
+                l_style.set("font-style", self._font_style_to_str(first_l))
                 l_style.set("background-color", self._color_to_rgba(first_l.fill_color))
                 l_style.set("border-color", self._color_to_rgba(first_l.border_color))
                 l_style.set("border-thickness", str(int(first_l.border_width)))
@@ -553,6 +568,7 @@ class CXLDocument:
                 text_elem.set("font-name", node.font_family)
                 text_elem.set("font-size", str(int(node.font_size)))
                 text_elem.set("color", node.font_color)
+                text_elem.set("style", self._font_style_to_str(node))
                 # shape
                 shape_elem = style_elem.find("shape")
                 if shape_elem is None:
@@ -574,6 +590,17 @@ class CXLDocument:
             b = int(hex_color[5:7], 16)
             return f"{r},{g},{b},255"
         return hex_color
+
+    @staticmethod
+    def _font_style_to_str(node: ConceptData) -> str:
+        styles = []
+        if getattr(node, "font_bold", False):
+            styles.append("bold")
+        if getattr(node, "font_italic", False):
+            styles.append("italic")
+        if getattr(node, "font_underline", False):
+            styles.append("underline")
+        return "-".join(styles) if styles else "plain"
 
     def new_map(self, width: int = 800, height: int = 600) -> None:
         """Create a new blank map with default style sheet."""
@@ -626,6 +653,7 @@ class CXLDocument:
             "font-name": c_style.get("font-name"),
             "font-size": c_style.get("font-size"),
             "font-color": c_style.get("font-color"),
+            "font-style": c_style.get("font-style"),
             "background-color": c_style.get("background-color"),
             "border-color": c_style.get("border-color"),
             "border-thickness": c_style.get("border-thickness"),
@@ -634,6 +662,7 @@ class CXLDocument:
             "font-name": l_style.get("font-name"),
             "font-size": l_style.get("font-size"),
             "font-color": l_style.get("font-color"),
+            "font-style": l_style.get("font-style"),
             "background-color": l_style.get("background-color"),
             "border-color": l_style.get("border-color"),
             "border-thickness": l_style.get("border-thickness"),
@@ -691,7 +720,14 @@ class EditableTextItem(QGraphicsTextItem):
         super().__init__(node.data.label, node)
         self.node = node
         self.setDefaultTextColor(QColor(node.data.font_color))
-        self.setFont(QFont(node.data.font_family, int(node.data.font_size)))
+        font = QFont(node.data.font_family, int(node.data.font_size))
+        if getattr(node.data, "font_bold", False):
+            font.setBold(True)
+        if getattr(node.data, "font_italic", False):
+            font.setItalic(True)
+        if getattr(node.data, "font_underline", False):
+            font.setUnderline(True)
+        self.setFont(font)
         self.setTextInteractionFlags(Qt.NoTextInteraction)
 
     def focusOutEvent(self, event) -> None:
@@ -744,6 +780,10 @@ class NodeItem(QGraphicsObject):
         font = QFont(self.data.font_family, int(self.data.font_size))
         if getattr(self.data, "font_bold", False):
             font.setBold(True)
+        if getattr(self.data, "font_italic", False):
+            font.setItalic(True)
+        if getattr(self.data, "font_underline", False):
+            font.setUnderline(True)
         metrics = QFontMetrics(font)
         text_rect = metrics.boundingRect(self.data.label)
         # Ensure width >= text width + padding
@@ -764,6 +804,10 @@ class NodeItem(QGraphicsObject):
         lbl_font = QFont(self.data.font_family, int(self.data.font_size))
         if getattr(self.data, "font_bold", False):
             lbl_font.setBold(True)
+        if getattr(self.data, "font_italic", False):
+            lbl_font.setItalic(True)
+        if getattr(self.data, "font_underline", False):
+            lbl_font.setUnderline(True)
         self.label_item.setFont(lbl_font)
         self.label_item.setDefaultTextColor(QColor(self.data.font_color))
         self._position_label()
@@ -900,7 +944,14 @@ class NodeItem(QGraphicsObject):
             new_w = max(event.pos().x(), 40.0)
             new_h = max(event.pos().y(), 20.0)
             # Use text bounding for minimal
-            metrics = QFontMetrics(QFont(self.data.font_family, int(self.data.font_size)))
+            font = QFont(self.data.font_family, int(self.data.font_size))
+            if getattr(self.data, "font_bold", False):
+                font.setBold(True)
+            if getattr(self.data, "font_italic", False):
+                font.setItalic(True)
+            if getattr(self.data, "font_underline", False):
+                font.setUnderline(True)
+            metrics = QFontMetrics(font)
             text_rect = metrics.boundingRect(self.data.label)
             min_w = text_rect.width() + 20
             min_h = text_rect.height() + 20
@@ -1173,9 +1224,16 @@ class StyleEditor(QWidget):
         self.font_size_spin.setRange(6, 72)
         layout.addWidget(QLabel("Dimensione font:"))
         layout.addWidget(self.font_size_spin)
-        # Bold option
+        # Bold, italic and underline options
         self.bold_check = QCheckBox("Grassetto")
+        self.italic_check = QCheckBox("Corsivo")
+        self.underline_check = QCheckBox("Sottolineato")
         layout.addWidget(self.bold_check)
+        layout.addWidget(self.italic_check)
+        layout.addWidget(self.underline_check)
+        # Font colour
+        self.font_color_btn = QPushButton("Scegli colore testo")
+        layout.addWidget(self.font_color_btn)
         # Fill colour
         self.fill_btn = QPushButton("Scegli colore riempimento")
         layout.addWidget(self.fill_btn)
@@ -1204,6 +1262,7 @@ class StyleEditor(QWidget):
         self.apply_btn.clicked.connect(self.apply_changes)
         self.fill_btn.clicked.connect(self.choose_fill_color)
         self.border_btn.clicked.connect(self.choose_border_color)
+        self.font_color_btn.clicked.connect(self.choose_font_color)
         self.arrow_start_btn.clicked.connect(self.apply_changes)
         self.arrow_end_btn.clicked.connect(self.apply_changes)
         # Disable individual controls until a selectable item is chosen
@@ -1225,19 +1284,25 @@ class StyleEditor(QWidget):
             self.font_combo.setCurrentFont(QFont("Verdana"))
             self.font_size_spin.setValue(12)
             self.bold_check.setChecked(False)
+            self.italic_check.setChecked(False)
+            self.underline_check.setChecked(False)
             self.border_thick_spin.setValue(1)
             self.fill_btn.setStyleSheet("")
             self.border_btn.setStyleSheet("")
+            self.font_color_btn.setStyleSheet("")
             return
         # Populate fields
         self.label_edit.setText(node.data.label)
         self.font_combo.setCurrentFont(QFont(node.data.font_family))
         self.font_size_spin.setValue(int(node.data.font_size))
         self.bold_check.setChecked(getattr(node.data, "font_bold", False))
+        self.italic_check.setChecked(getattr(node.data, "font_italic", False))
+        self.underline_check.setChecked(getattr(node.data, "font_underline", False))
         self.border_thick_spin.setValue(int(node.data.border_width))
         # Set button colours
         self.fill_btn.setStyleSheet(f"background-color: {node.data.fill_color}")
         self.border_btn.setStyleSheet(f"background-color: {node.data.border_color}")
+        self.font_color_btn.setStyleSheet(f"background-color: {node.data.font_color}")
 
     def set_connection(self, conn: Optional[ConnectionItem]) -> None:
         self.current_connection = conn
@@ -1260,11 +1325,23 @@ class StyleEditor(QWidget):
             self.font_combo,
             self.font_size_spin,
             self.bold_check,
+            self.italic_check,
+            self.underline_check,
+            self.font_color_btn,
             self.fill_btn,
             self.border_btn,
             self.border_thick_spin,
         ):
             widget.setEnabled(enable)
+
+    def choose_font_color(self):
+        if self.current_node is None:
+            return
+        colour = QColorDialog.getColor(QColor(self.current_node.data.font_color), self, "Colore testo")
+        if colour.isValid():
+            self.current_node.data.font_color = colour.name()
+            self.font_color_btn.setStyleSheet(f"background-color: {colour.name()}")
+            self.current_node.update()
 
     def choose_fill_color(self):
         if self.current_node is None:
@@ -1299,6 +1376,8 @@ class StyleEditor(QWidget):
             self.current_node.data.font_family = self.font_combo.currentFont().family()
             self.current_node.data.font_size = self.font_size_spin.value()
             self.current_node.data.font_bold = self.bold_check.isChecked()
+            self.current_node.data.font_italic = self.italic_check.isChecked()
+            self.current_node.data.font_underline = self.underline_check.isChecked()
             # Border thickness
             self.current_node.data.border_width = self.border_thick_spin.value()
             # Update visuals
@@ -1512,6 +1591,8 @@ class ConceptMapEditor(QMainWindow):
             self.document.concepts[cid].border_color = item.data.border_color
             self.document.concepts[cid].border_width = item.data.border_width
             self.document.concepts[cid].font_bold = getattr(item.data, "font_bold", False)
+            self.document.concepts[cid].font_italic = getattr(item.data, "font_italic", False)
+            self.document.concepts[cid].font_underline = getattr(item.data, "font_underline", False)
         # Update connections
         self.document.connections.clear()
         for conn_item in self.connection_items:
@@ -1652,6 +1733,9 @@ class ConceptMapEditor(QMainWindow):
                 fill_color=self.document._parse_color(style.get("background-color", "237,244,246,255")),
                 border_color=self.document._parse_color(style.get("border-color", "0,0,0,255")),
                 border_width=float(style.get("border-thickness", "1")),
+                font_bold="bold" in style.get("font-style", "plain"),
+                font_italic="italic" in style.get("font-style", "plain"),
+                font_underline="underline" in style.get("font-style", "plain"),
                 is_linker=False
             )
             self.document.concepts[cid] = data
@@ -1706,6 +1790,9 @@ class ConceptMapEditor(QMainWindow):
                     fill_color=self.document._parse_color(style.get("background-color", "237,244,246,255")),
                     border_color=self.document._parse_color(style.get("border-color", "0,0,0,255")),
                     border_width=float(style.get("border-thickness", "1")),
+                    font_bold="bold" in style.get("font-style", "plain"),
+                    font_italic="italic" in style.get("font-style", "plain"),
+                    font_underline="underline" in style.get("font-style", "plain"),
                     is_linker=False
                 )
                 self.temp_new_node = NodeItem(data, self.scene)
@@ -1757,6 +1844,9 @@ class ConceptMapEditor(QMainWindow):
                             fill_color=self.document._parse_color(style.get("background-color", "237,244,246,255")),
                             border_color=self.document._parse_color(style.get("border-color", "0,0,0,255")),
                             border_width=float(style.get("border-thickness", "1")),
+                            font_bold="bold" in style.get("font-style", "plain"),
+                            font_italic="italic" in style.get("font-style", "plain"),
+                            font_underline="underline" in style.get("font-style", "plain"),
                             is_linker=True
                         )
                         self.document.concepts[lid] = data
@@ -1805,6 +1895,9 @@ class ConceptMapEditor(QMainWindow):
                         fill_color=self.document._parse_color(style_l.get("background-color", "237,244,246,255")),
                         border_color=self.document._parse_color(style_l.get("border-color", "0,0,0,255")),
                         border_width=float(style_l.get("border-thickness", "1")),
+                        font_bold="bold" in style_l.get("font-style", "plain"),
+                        font_italic="italic" in style_l.get("font-style", "plain"),
+                        font_underline="underline" in style_l.get("font-style", "plain"),
                         is_linker=True
                     )
                     self.document.concepts[lid] = ldata
@@ -1857,6 +1950,9 @@ class ConceptMapEditor(QMainWindow):
                         fill_color=self.document._parse_color(style.get("background-color", "237,244,246,255")),
                         border_color=self.document._parse_color(style.get("border-color", "0,0,0,255")),
                         border_width=float(style.get("border-thickness", "1")),
+                        font_bold="bold" in style.get("font-style", "plain"),
+                        font_italic="italic" in style.get("font-style", "plain"),
+                        font_underline="underline" in style.get("font-style", "plain"),
                         is_linker=True
                     )
                     self.document.concepts[lid] = data
