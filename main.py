@@ -66,6 +66,7 @@ from PyQt5.QtCore import (
     Qt,
     QRectF,
     QPointF,
+    QPoint,
     pyqtSignal,
     QEvent,
 )
@@ -1106,6 +1107,50 @@ class ConnectionItem(QGraphicsLineItem):
 # Main editor window with scene, view and style panel
 #####################################################
 
+class GraphicsView(QGraphicsView):
+    """Graphics view that supports mouse-based panning and zooming."""
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self._panning = False
+        self._last_pos = QPoint()
+        self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
+        self.setResizeAnchor(QGraphicsView.AnchorUnderMouse)
+
+    def mousePressEvent(self, event):
+        if event.button() in (Qt.MiddleButton, Qt.RightButton):
+            self._panning = True
+            self._last_pos = event.pos()
+            self.setCursor(Qt.ClosedHandCursor)
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if self._panning:
+            delta = event.pos() - self._last_pos
+            self._last_pos = event.pos()
+            self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() - delta.x())
+            self.verticalScrollBar().setValue(self.verticalScrollBar().value() - delta.y())
+            event.accept()
+            return
+        super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        if event.button() in (Qt.MiddleButton, Qt.RightButton):
+            self._panning = False
+            self.setCursor(Qt.ArrowCursor)
+            event.accept()
+            return
+        super().mouseReleaseEvent(event)
+
+    def wheelEvent(self, event):
+        factor = 1.2
+        if event.angleDelta().y() > 0:
+            self.scale(factor, factor)
+        else:
+            self.scale(1 / factor, 1 / factor)
+
 class StyleEditor(QWidget):
     """Panel for editing the style of a selected node or connection."""
 
@@ -1162,6 +1207,8 @@ class StyleEditor(QWidget):
         self.arrow_end_btn.clicked.connect(self.apply_changes)
         # Disable individual controls until a selectable item is chosen
         self.enable_node_controls(False)
+        # Ensure the editor itself remains interactive
+        self.setEnabled(True)
 
     def set_node(self, node: Optional[NodeItem]) -> None:
         """Set the node currently being edited."""
@@ -1237,6 +1284,8 @@ class StyleEditor(QWidget):
             self.current_node.update()
 
     def apply_changes(self):
+        if self.current_node is None and self.current_connection is None:
+            return
         editor = self.parent()
         if isinstance(editor, ConceptMapEditor):
             editor.push_undo_state()
@@ -1276,7 +1325,7 @@ class ConceptMapEditor(QMainWindow):
         self.document = CXLDocument()
         # Scene and view
         self.scene = QGraphicsScene(self)
-        self.view = QGraphicsView(self.scene, self)
+        self.view = GraphicsView(self.scene, self)
         self.view.setRenderHint(QPainter.Antialiasing)
         self.view.setDragMode(QGraphicsView.RubberBandDrag)
         self.setCentralWidget(self.view)
@@ -1285,6 +1334,8 @@ class ConceptMapEditor(QMainWindow):
         self.dock = QDockWidget("Proprietà", self)
         self.dock.setWidget(self.style_editor)
         self.addDockWidget(Qt.RightDockWidgetArea, self.dock)
+        # Keep the dock enabled so the user can always interact with it
+        self.dock.setEnabled(True)
         self.dock.show()
         # Actions and menu
         self._create_actions()
