@@ -109,6 +109,7 @@ from PyQt5.QtWidgets import (
     QMessageBox,
     QFontComboBox,
     QCheckBox,
+    QToolBar,
 )
 
 
@@ -1340,6 +1341,7 @@ class ConceptMapEditor(QMainWindow):
         # Actions and menu
         self._create_actions()
         self._create_menu()
+        self._create_toolbar()
         # Map state
         self.node_items: Dict[str, NodeItem] = {}
         self.connection_items: List[ConnectionItem] = []
@@ -1364,6 +1366,7 @@ class ConceptMapEditor(QMainWindow):
         self.zoom_in_act.setShortcut(QKeySequence.ZoomIn)
         self.zoom_out_act = QAction("Zoom out", self)
         self.zoom_out_act.setShortcut(QKeySequence.ZoomOut)
+        self.autofit_act = QAction("Autofit", self)
         # Connect actions
         self.new_act.triggered.connect(self.new_file)
         self.open_act.triggered.connect(self.open_file)
@@ -1372,6 +1375,7 @@ class ConceptMapEditor(QMainWindow):
         self.exit_act.triggered.connect(self.close)
         self.zoom_in_act.triggered.connect(self.zoom_in)
         self.zoom_out_act.triggered.connect(self.zoom_out)
+        self.autofit_act.triggered.connect(self.autofit_view)
 
     def _create_menu(self) -> None:
         menubar = self.menuBar()
@@ -1385,6 +1389,13 @@ class ConceptMapEditor(QMainWindow):
         view_menu = menubar.addMenu("Vista")
         view_menu.addAction(self.zoom_in_act)
         view_menu.addAction(self.zoom_out_act)
+        view_menu.addAction(self.autofit_act)
+
+    def _create_toolbar(self) -> None:
+        toolbar = self.addToolBar("View")
+        toolbar.addAction(self.zoom_in_act)
+        toolbar.addAction(self.zoom_out_act)
+        toolbar.addAction(self.autofit_act)
 
     def zoom_in(self) -> None:
         """Zoom into the scene."""
@@ -1393,6 +1404,15 @@ class ConceptMapEditor(QMainWindow):
     def zoom_out(self) -> None:
         """Zoom out of the scene."""
         self.view.scale(1 / 1.2, 1 / 1.2)
+
+    def autofit_view(self) -> None:
+        """Center and fit the view to show the entire map."""
+        rect = self.scene.itemsBoundingRect()
+        if rect.isNull():
+            self.view.resetTransform()
+            return
+        self.view.fitInView(rect, Qt.KeepAspectRatio)
+        self.view.centerOn(rect.center())
 
     def clear_scene(self) -> None:
         """Remove all items from scene and reset state."""
@@ -1407,6 +1427,7 @@ class ConceptMapEditor(QMainWindow):
         self.document.new_map()
         self.clear_scene()
         self.setWindowTitle("Nuova mappa - Editor concetti (PyQt)")
+        self.autofit_view()
 
     def open_file(self) -> None:
         filepath, _ = QFileDialog.getOpenFileName(self, "Apri file CXL", "", "CXL (*.cxl);;Tutti i file (*)")
@@ -1440,8 +1461,7 @@ class ConceptMapEditor(QMainWindow):
             self.scene.addItem(connection_item)
             self.connection_items.append(connection_item)
         self.setWindowTitle(f"{filepath} - Editor concetti (PyQt)")
-        # Fit view
-        self.view.fitInView(self.scene.itemsBoundingRect(), Qt.KeepAspectRatio)
+        self.autofit_view()
 
     def import_file(self) -> None:
         """Import a map. Currently behaves like :meth:`open_file`.
@@ -1920,6 +1940,7 @@ def main() -> None:
     start = StartupDialog(editor)
     if start.exec_() == QDialog.Accepted:
         editor.show()
+        editor.autofit_view()
         sys.exit(app.exec_())
     sys.exit(0)
 
