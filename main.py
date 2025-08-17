@@ -748,6 +748,11 @@ class NodeItem(QGraphicsObject):
         pad = 10
         min_w = text_rect.width() + pad * 2
         min_h = text_rect.height() + pad * 2
+        # Notify the scene before changing the geometry so that its internal
+        # indexing remains valid.  Changing the width/height first caused Qt to
+        # lose track of the item's previous bounds, which could result in
+        # items "teleporting" to the origin when subsequently manipulated.
+        self.prepareGeometryChange()
         if self.data.width < min_w:
             self.data.width = min_w
         if self.data.height < min_h:
@@ -759,7 +764,6 @@ class NodeItem(QGraphicsObject):
             lbl_font.setBold(True)
         self.label_item.setFont(lbl_font)
         self.label_item.setDefaultTextColor(QColor(self.data.font_color))
-        self.prepareGeometryChange()
         self._position_label()
 
     def _position_label(self) -> None:
@@ -902,9 +906,13 @@ class NodeItem(QGraphicsObject):
                 new_w = min_w
             if new_h < min_h:
                 new_h = min_h
+            # Inform the scene of an upcoming geometry change before mutating
+            # the node's dimensions.  Without this call the scene's internal
+            # bookkeeping becomes inconsistent, which manifested as items
+            # jumping to the corner of the view during interactions.
+            self.prepareGeometryChange()
             self.data.width = new_w
             self.data.height = new_h
-            self.prepareGeometryChange()
             self.update()
             self._position_label()
             # Update connections
