@@ -195,11 +195,13 @@ class CXLDocument:
             ns_uri = self.root.tag[1:].split("}")[0]
             self.ns = {"c": ns_uri}
         # Find map
-        map_elem = self.root.find("c:map", self.ns) or self.root.find("map")
+        map_elem = self.root.find("c:map", self.ns)
+        if map_elem is None:
+            map_elem = self.root.find("map")
         if map_elem is None:
             raise ValueError("Il file non contiene un elemento <map>.")
         # Determine format
-        self.appearance_mode = bool(map_elem.find("c:concept-appearance-list", self.ns))
+        self.appearance_mode = map_elem.find("c:concept-appearance-list", self.ns) is not None
         # Parse concepts and linking phrases
         if self.appearance_mode:
             # Concept list
@@ -1568,13 +1570,17 @@ class ConceptMapEditor(QMainWindow):
         printer = QPrinter(QPrinter.HighResolution)
         printer.setOutputFormat(QPrinter.PdfFormat)
         printer.setOutputFileName(filepath)
-        self.view.render(printer)
+        painter = QPainter(printer)
+        self.view.render(painter)
+        painter.end()
 
     def print_map(self) -> None:
         printer = QPrinter(QPrinter.HighResolution)
         dialog = QPrintDialog(printer, self)
         if dialog.exec_() == QDialog.Accepted:
-            self.view.render(printer)
+            painter = QPainter(printer)
+            self.view.render(painter)
+            painter.end()
 
     def edit_style(self) -> None:
         items = self.scene.selectedItems()
