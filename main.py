@@ -1667,66 +1667,66 @@ class ConceptMapEditor(QMainWindow):
                         conn = ConnectionItem(source_node, 0, dest_item, 0)
                         self.scene.addItem(conn)
                         self.connection_items.append(conn)
+                    for n in self.node_items.values():
+                        n.hide_anchor_points()
+                    self.update_model_from_scene()
+                    return
+                # Finalise new concept dropped in empty space
+                cid = str(uuid.uuid4())
+                self.temp_new_node.data.id = cid
+                self.temp_new_node.data.x = pos.x()
+                self.temp_new_node.data.y = pos.y()
+                self.document.concepts[cid] = self.temp_new_node.data
+                self.node_items[cid] = self.temp_new_node
+                if source_node.data.is_linker:
+                    use_linker = False
+                else:
+                    modifiers = QApplication.keyboardModifiers()
+                    use_linker = not (modifiers & Qt.ShiftModifier)
+                if use_linker:
+                    lid = str(uuid.uuid4())
+                    style_l = self.document.default_linker_style if self.document.default_linker_style else self.document.default_concept_style
+                    ldata = ConceptData(
+                        lid, "????",
+                        (source_node.pos().x() + self.temp_new_node.pos().x()) / 2,
+                        (source_node.pos().y() + self.temp_new_node.pos().y()) / 2,
+                        90, 20,
+                        font_family=style_l.get("font-name", "Verdana"),
+                        font_size=float(style_l.get("font-size", "12")),
+                        font_color=self.document._parse_color(style_l.get("font-color", "0,0,0,255")),
+                        fill_color=self.document._parse_color(style_l.get("background-color", "237,244,246,255")),
+                        border_color=self.document._parse_color(style_l.get("border-color", "0,0,0,255")),
+                        border_width=float(style_l.get("border-thickness", "1")),
+                        is_linker=True
+                    )
+                    self.document.concepts[lid] = ldata
+                    linker_item2 = NodeItem(ldata, self.scene)
+                    linker_item2.request_connection.connect(self.handle_connection_request)
+                    linker_item2.node_moved.connect(self.node_moved)
+                    linker_item2.node_selected.connect(self.node_selected)
+                    self.scene.addItem(linker_item2)
+                    self.node_items[lid] = linker_item2
+                    if self.temp_connection:
+                        if self.temp_connection.scene() is not None:
+                            self.scene.removeItem(self.temp_connection)
+                    conn1 = ConnectionItem(source_node, 0, linker_item2, 0)
+                    conn2 = ConnectionItem(linker_item2, 1, self.temp_new_node, 0)
+                    self.scene.addItem(conn1)
+                    self.scene.addItem(conn2)
+                    self.connection_items.extend([conn1, conn2])
+                else:
+                    if self.temp_connection:
+                        self.connection_items.append(self.temp_connection)
+                    else:
+                        conn = ConnectionItem(source_node, 0, self.temp_new_node, 0)
+                        self.scene.addItem(conn)
+                        self.connection_items.append(conn)
+                self.temp_new_node = None
+                self.temp_connection = None
                 for n in self.node_items.values():
                     n.hide_anchor_points()
                 self.update_model_from_scene()
                 return
-            # Finalise new concept
-            cid = str(uuid.uuid4())
-            self.temp_new_node.data.id = cid
-            self.temp_new_node.data.x = pos.x()
-            self.temp_new_node.data.y = pos.y()
-            self.document.concepts[cid] = self.temp_new_node.data
-            self.node_items[cid] = self.temp_new_node
-            if source_node.data.is_linker:
-                use_linker = False
-            else:
-                modifiers = QApplication.keyboardModifiers()
-                use_linker = not (modifiers & Qt.ShiftModifier)
-            if use_linker:
-                lid = str(uuid.uuid4())
-                style_l = self.document.default_linker_style if self.document.default_linker_style else self.document.default_concept_style
-                ldata = ConceptData(
-                    lid, "????",
-                    (source_node.pos().x() + self.temp_new_node.pos().x()) / 2,
-                    (source_node.pos().y() + self.temp_new_node.pos().y()) / 2,
-                    90, 20,
-                    font_family=style_l.get("font-name", "Verdana"),
-                    font_size=float(style_l.get("font-size", "12")),
-                    font_color=self.document._parse_color(style_l.get("font-color", "0,0,0,255")),
-                    fill_color=self.document._parse_color(style_l.get("background-color", "237,244,246,255")),
-                    border_color=self.document._parse_color(style_l.get("border-color", "0,0,0,255")),
-                    border_width=float(style_l.get("border-thickness", "1")),
-                    is_linker=True
-                )
-                self.document.concepts[lid] = ldata
-                linker_item2 = NodeItem(ldata, self.scene)
-                linker_item2.request_connection.connect(self.handle_connection_request)
-                linker_item2.node_moved.connect(self.node_moved)
-                linker_item2.node_selected.connect(self.node_selected)
-                self.scene.addItem(linker_item2)
-                self.node_items[lid] = linker_item2
-                if self.temp_connection:
-                    if self.temp_connection.scene() is not None:
-                        self.scene.removeItem(self.temp_connection)
-                conn1 = ConnectionItem(source_node, 0, linker_item2, 0)
-                conn2 = ConnectionItem(linker_item2, 1, self.temp_new_node, 0)
-                self.scene.addItem(conn1)
-                self.scene.addItem(conn2)
-                self.connection_items.extend([conn1, conn2])
-            else:
-                if self.temp_connection:
-                    self.connection_items.append(self.temp_connection)
-                else:
-                    conn = ConnectionItem(source_node, 0, self.temp_new_node, 0)
-                    self.scene.addItem(conn)
-                    self.connection_items.append(conn)
-            self.temp_new_node = None
-            self.temp_connection = None
-            for n in self.node_items.values():
-                n.hide_anchor_points()
-            self.update_model_from_scene()
-            return
         # No temp node: maybe connecting existing nodes directly
         if isinstance(dest_item, NodeItem) and dest_item is not source_node:
             self.push_undo_state()
