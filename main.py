@@ -1059,7 +1059,14 @@ class NodeItem(QGraphicsObject):
         super().mouseDoubleClickEvent(event)
 
     def finish_editing(self, text: str) -> None:
+        old_text = self.data.label
         new_text = text.strip() or "????"
+        if new_text != old_text:
+            editor = self.scene().parent()
+            if hasattr(editor, "push_undo_state"):
+                editor.push_undo_state()
+            if hasattr(editor, "set_modified"):
+                editor.set_modified(True)
         self.data.label = new_text
         self._update_bounds()
         self.update()
@@ -1413,7 +1420,9 @@ class ConceptMapEditor(QMainWindow):
         # Undo/redo stacks
         self.undo_stack: List[CXLDocument] = []
         self.redo_stack: List[CXLDocument] = []
-        self.push_undo_state()
+        self._dirty: bool = False
+        self.push_undo_state(mark_dirty=False)
+        self.update_window_title()
 
     def _create_actions(self) -> None:
         style = self.style()
@@ -1481,6 +1490,43 @@ class ConceptMapEditor(QMainWindow):
         toolbar.addAction(self.autofit_act)
         toolbar.addAction(self.export_pdf_act)
         toolbar.addAction(self.print_act)
+
+    def set_modified(self, modified: bool) -> None:
+        """Update modified flag and window title."""
+        self._dirty = modified
+        self.update_window_title()
+
+    def update_window_title(self) -> None:
+        """Refresh window title, appending an asterisk if unsaved."""
+        if self.document.filepath:
+            base = self.document.filepath
+        else:
+            base = "Nuova mappa"
+        title = f"{base} - Editor concetti (PyQt)"
+        if getattr(self, "_dirty", False):
+            title += " *"
+        self.setWindowTitle(title)
+
+    def maybe_save(self) -> bool:
+        """Prompt to save if there are unsaved changes."""
+        if not self._dirty:
+            return True
+        resp = QMessageBox.warning(
+            self,
+            "Modifiche non salvate",
+            "Ci sono modifiche non salvate. Vuoi salvarle?",
+            QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel,
+        )
+        if resp == QMessageBox.Yes:
+            self.save_file()
+            return not self._dirty
+        return resp == QMessageBox.No
+
+    def closeEvent(self, event) -> None:  # type: ignore[override]
+        if self.maybe_save():
+            event.accept()
+        else:
+            event.ignore()
 
     def copy_selection(self) -> None:
         items = self.scene.selectedItems()
@@ -1637,12 +1683,17 @@ class ConceptMapEditor(QMainWindow):
 
     def new_file(self) -> None:
         """Create a new blank map."""
+        if not self.maybe_save():
+            return
         self.document.new_map()
         self.clear_scene()
-        self.setWindowTitle("Nuova mappa - Editor concetti (PyQt)")
+        self.set_modified(False)
+        self.update_window_title()
         self.autofit_view()
 
     def open_file(self) -> None:
+        if not self.maybe_save():
+            return
         filepath, _ = QFileDialog.getOpenFileName(self, "Apri file CXL", "", "CXL (*.cxl);;Tutti i file (*)")
         if not filepath:
             return
@@ -1673,7 +1724,8 @@ class ConceptMapEditor(QMainWindow):
             connection_item = ConnectionItem(src_item, src_anchor, dst_item, dst_anchor)
             self.scene.addItem(connection_item)
             self.connection_items.append(connection_item)
-        self.setWindowTitle(f"{filepath} - Editor concetti (PyQt)")
+        self.set_modified(False)
+        self.update_window_title()
         self.autofit_view()
 
     def import_file(self) -> None:
@@ -1695,6 +1747,7 @@ class ConceptMapEditor(QMainWindow):
         except Exception as exc:
             QMessageBox.critical(self, "Errore", f"Errore durante il salvataggio:\n{exc}")
             return
+        self.set_modified(False)
         QMessageBox.information(self, "Salvataggio", "File salvato con successo.")
 
     def save_file_as(self) -> None:
@@ -1705,7 +1758,8 @@ class ConceptMapEditor(QMainWindow):
         self.update_model_from_scene()
         try:
             self.document.save(filepath)
-            self.setWindowTitle(f"{filepath} - Editor concetti (PyQt)")
+            self.document.filepath = filepath
+            self.set_modified(False)
         except Exception as exc:
             QMessageBox.critical(self, "Errore", f"Errore durante il salvataggio:\n{exc}")
 
@@ -1745,9 +1799,11 @@ class ConceptMapEditor(QMainWindow):
     # Scene interaction
     ###################
 
-    def push_undo_state(self) -> None:
+    def push_undo_state(self, mark_dirty: bool = True) -> None:
         self.undo_stack.append(copy.deepcopy(self.document))
         self.redo_stack.clear()
+        if mark_dirty:
+            self.set_modified(True)
 
     def rebuild_scene_from_document(self) -> None:
         self.clear_scene()
@@ -1775,6 +1831,7 @@ class ConceptMapEditor(QMainWindow):
         self.redo_stack.append(copy.deepcopy(self.document))
         self.document = self.undo_stack.pop()
         self.rebuild_scene_from_document()
+        self.set_modified(True)
 
     def redo(self) -> None:
         if not self.redo_stack:
@@ -1782,6 +1839,7 @@ class ConceptMapEditor(QMainWindow):
         self.undo_stack.append(copy.deepcopy(self.document))
         self.document = self.redo_stack.pop()
         self.rebuild_scene_from_document()
+        self.set_modified(True)
 
     def delete_selected(self) -> None:
         items = list(self.scene.selectedItems())
@@ -2101,8 +2159,8 @@ class ConceptMapEditor(QMainWindow):
         return
 
     def node_moved(self, node: NodeItem) -> None:
-        """Placeholder for future reactions to node movement."""
-        pass
+        """Mark document as modified when a node moves."""
+        self.set_modified(True)
 
     def node_selected(self, node: NodeItem) -> None:
         self.selection_changed()
