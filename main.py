@@ -761,6 +761,13 @@ class NodeItem(QGraphicsObject):
         # Children: label item
         self.label_item = EditableTextItem(self)
         self.label_item.setZValue(1)
+        # Prevent the internal label item from being selected independently
+        # of its parent node.  When the label could be selected, the scene
+        # reported multiple selected items (the node and its label), which
+        # left the styling panel disabled.  Disabling selection and mouse
+        # events on the label keeps the node as the sole selected item.
+        self.label_item.setFlag(QGraphicsItem.ItemIsSelectable, False)
+        self.label_item.setAcceptedMouseButtons(Qt.NoButton)
         # Resizing handle (bottom right)
         self.handle_size = 8
         self.resizing = False
@@ -1681,24 +1688,18 @@ class ConceptMapEditor(QMainWindow):
 
     def selection_changed(self) -> None:
         items = self.scene.selectedItems()
-        if len(items) == 1:
-            item = items[0]
-            if isinstance(item, NodeItem):
-                self.style_editor.set_node(item)
-                self.style_editor.set_connection(None)
-                self.dock.show()
-            elif isinstance(item, ConnectionItem):
-                self.style_editor.set_node(None)
-                self.style_editor.set_connection(item)
-                self.dock.show()
-            else:
-                self.style_editor.set_node(None)
-                self.style_editor.set_connection(None)
-                self.dock.show()
+        node_items = [i for i in items if isinstance(i, NodeItem)]
+        conn_items = [i for i in items if isinstance(i, ConnectionItem)]
+        if len(node_items) == 1 and not conn_items:
+            self.style_editor.set_node(node_items[0])
+            self.style_editor.set_connection(None)
+        elif len(conn_items) == 1 and not node_items:
+            self.style_editor.set_node(None)
+            self.style_editor.set_connection(conn_items[0])
         else:
             self.style_editor.set_node(None)
             self.style_editor.set_connection(None)
-            self.dock.show()
+        self.dock.show()
         # Keep dock always enabled
         self.dock.setEnabled(True)
 
