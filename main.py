@@ -1389,11 +1389,13 @@ class ConceptMapEditor(QMainWindow):
         self.document = CXLDocument()
         # Scene and view
         self.scene = QGraphicsScene(self)
+        self.scene.setBackgroundBrush(QBrush(Qt.white))
         self.view = GraphicsView(self.scene, self)
         self.view.setRenderHint(QPainter.Antialiasing)
         self.view.setDragMode(QGraphicsView.RubberBandDrag)
         self.view.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
         self.view.setResizeAnchor(QGraphicsView.AnchorUnderMouse)
+        self.view.setBackgroundBrush(QBrush(Qt.white))
         self.setCentralWidget(self.view)
         # Actions and menu
         self._create_actions()
@@ -1406,7 +1408,6 @@ class ConceptMapEditor(QMainWindow):
         self.temp_new_node: Optional[NodeItem] = None
         self.temp_connection: Optional[ConnectionItem] = None
         # Scene events
-        self.scene.setBackgroundBrush(QBrush(QColor("#2b2b2b")))
         self.scene.mouseDoubleClickEvent = self.scene_double_click
         self.scene.selectionChanged.connect(self.selection_changed)
         # Undo/redo stacks
@@ -1438,7 +1439,7 @@ class ConceptMapEditor(QMainWindow):
         self.paste_act.triggered.connect(self.paste_selection)
         self.export_pdf_act = QAction(style.standardIcon(QStyle.SP_FileIcon), "Esporta PDF", self)
         self.export_pdf_act.triggered.connect(self.export_pdf)
-        self.print_act = QAction(style.standardIcon(QStyle.SP_FileIcon), "Stampa", self)
+        self.print_act = QAction(style.standardIcon(QStyle.SP_DialogPrintButton), "Stampa", self)
         self.print_act.triggered.connect(self.print_map)
         # Connect actions
         self.new_act.triggered.connect(self.new_file)
