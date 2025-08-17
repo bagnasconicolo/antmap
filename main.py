@@ -58,6 +58,7 @@ import sys
 import uuid
 import xml.etree.ElementTree as ET
 import copy
+import json
 import math
 import os
 from typing import Dict, List, Optional, Tuple
@@ -111,6 +112,7 @@ from PyQt5.QtWidgets import (
     QCheckBox,
     QToolBar,
 )
+from PyQt5.QtPrintSupport import QPrinter, QPrintDialog
 
 
 ##############################
@@ -1193,6 +1195,12 @@ class GraphicsView(QGraphicsView):
         self.setResizeAnchor(QGraphicsView.AnchorUnderMouse)
 
     def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton and not self.itemAt(event.pos()):
+            self._panning = True
+            self._last_pos = event.pos()
+            self.setCursor(Qt.ClosedHandCursor)
+            event.accept()
+            return
         if event.button() in (Qt.MiddleButton, Qt.RightButton):
             self._panning = True
             self._last_pos = event.pos()
@@ -1212,7 +1220,7 @@ class GraphicsView(QGraphicsView):
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
-        if event.button() in (Qt.MiddleButton, Qt.RightButton):
+        if self._panning and event.button() in (Qt.LeftButton, Qt.MiddleButton, Qt.RightButton):
             self._panning = False
             self.setCursor(Qt.ArrowCursor)
             event.accept()
@@ -1413,6 +1421,16 @@ class ConceptMapEditor(QMainWindow):
         self.edit_style_act.setShortcut(QKeySequence("Ctrl+E"))
         self.edit_style_act.setEnabled(False)
         self.edit_style_act.triggered.connect(self.edit_style)
+        self.copy_act = QAction("Copia", self)
+        self.copy_act.setShortcut(QKeySequence.Copy)
+        self.copy_act.triggered.connect(self.copy_selection)
+        self.paste_act = QAction("Incolla", self)
+        self.paste_act.setShortcut(QKeySequence.Paste)
+        self.paste_act.triggered.connect(self.paste_selection)
+        self.export_pdf_act = QAction("Esporta PDF", self)
+        self.export_pdf_act.triggered.connect(self.export_pdf)
+        self.print_act = QAction("Stampa", self)
+        self.print_act.triggered.connect(self.print_map)
         # Connect actions
         self.new_act.triggered.connect(self.new_file)
         self.open_act.triggered.connect(self.open_file)
@@ -1430,10 +1448,14 @@ class ConceptMapEditor(QMainWindow):
         file_menu.addAction(self.open_act)
         file_menu.addAction(self.save_act)
         file_menu.addAction(self.save_as_act)
+        file_menu.addAction(self.export_pdf_act)
+        file_menu.addAction(self.print_act)
         file_menu.addSeparator()
         file_menu.addAction(self.exit_act)
         edit_menu = menubar.addMenu("Modifica")
         edit_menu.addAction(self.edit_style_act)
+        edit_menu.addAction(self.copy_act)
+        edit_menu.addAction(self.paste_act)
         view_menu = menubar.addMenu("Vista")
         view_menu.addAction(self.zoom_in_act)
         view_menu.addAction(self.zoom_out_act)
@@ -1444,6 +1466,115 @@ class ConceptMapEditor(QMainWindow):
         toolbar.addAction(self.zoom_in_act)
         toolbar.addAction(self.zoom_out_act)
         toolbar.addAction(self.autofit_act)
+        toolbar.addAction(self.export_pdf_act)
+        toolbar.addAction(self.print_act)
+
+    def copy_selection(self) -> None:
+        items = self.scene.selectedItems()
+        node_items = [i for i in items if isinstance(i, NodeItem)]
+        if not node_items:
+            return
+        selected_ids = {n.data.id for n in node_items}
+        data = {
+            "nodes": [
+                {
+                    "id": n.data.id,
+                    "label": n.data.label,
+                    "x": n.data.x,
+                    "y": n.data.y,
+                    "width": n.data.width,
+                    "height": n.data.height,
+                    "font_family": n.data.font_family,
+                    "font_size": n.data.font_size,
+                    "font_color": n.data.font_color,
+                    "fill_color": n.data.fill_color,
+                    "border_color": n.data.border_color,
+                    "border_width": n.data.border_width,
+                    "font_bold": n.data.font_bold,
+                    "font_italic": n.data.font_italic,
+                    "font_underline": n.data.font_underline,
+                    "is_linker": n.data.is_linker,
+                }
+                for n in node_items
+            ],
+            "connections": [
+                {
+                    "from": c.source.data.id,
+                    "to": c.dest.data.id,
+                    "from_anchor": c.source_anchor,
+                    "to_anchor": c.dest_anchor,
+                }
+                for c in self.connection_items
+                if c.source.data.id in selected_ids and c.dest.data.id in selected_ids
+            ],
+        }
+        QApplication.clipboard().setText(json.dumps(data))
+
+    def paste_selection(self) -> None:
+        try:
+            data = json.loads(QApplication.clipboard().text())
+        except json.JSONDecodeError:
+            return
+        if not data:
+            return
+        self.push_undo_state()
+        id_map: Dict[str, str] = {}
+        for node in data.get("nodes", []):
+            new_id = str(uuid.uuid4())
+            id_map[node["id"]] = new_id
+            ndata = ConceptData(
+                new_id,
+                node.get("label", "????"),
+                node.get("x", 0) + 20,
+                node.get("y", 0) + 20,
+                node.get("width", 120),
+                node.get("height", 60),
+                font_family=node.get("font_family", "Verdana"),
+                font_size=float(node.get("font_size", 12)),
+                font_color=node.get("font_color", "0,0,0,255"),
+                fill_color=node.get("fill_color", "237,244,246,255"),
+                border_color=node.get("border_color", "0,0,0,255"),
+                border_width=float(node.get("border_width", 1)),
+                font_bold=node.get("font_bold", False),
+                font_italic=node.get("font_italic", False),
+                font_underline=node.get("font_underline", False),
+                is_linker=node.get("is_linker", False),
+            )
+            self.document.concepts[new_id] = ndata
+            item = NodeItem(ndata, self.scene)
+            item.request_connection.connect(self.handle_connection_request)
+            item.node_moved.connect(self.node_moved)
+            item.node_selected.connect(self.node_selected)
+            self.scene.addItem(item)
+            self.node_items[new_id] = item
+        for conn in data.get("connections", []):
+            sid = id_map.get(conn.get("from"))
+            did = id_map.get(conn.get("to"))
+            if sid and did:
+                conn_item = ConnectionItem(
+                    self.node_items[sid],
+                    conn.get("from_anchor", 0),
+                    self.node_items[did],
+                    conn.get("to_anchor", 0),
+                )
+                self.scene.addItem(conn_item)
+                self.connection_items.append(conn_item)
+        self.update_model_from_scene()
+
+    def export_pdf(self) -> None:
+        filepath, _ = QFileDialog.getSaveFileName(self, "Esporta PDF", "", "PDF (*.pdf)")
+        if not filepath:
+            return
+        printer = QPrinter(QPrinter.HighResolution)
+        printer.setOutputFormat(QPrinter.PdfFormat)
+        printer.setOutputFileName(filepath)
+        self.view.render(printer)
+
+    def print_map(self) -> None:
+        printer = QPrinter(QPrinter.HighResolution)
+        dialog = QPrintDialog(printer, self)
+        if dialog.exec_() == QDialog.Accepted:
+            self.view.render(printer)
 
     def edit_style(self) -> None:
         items = self.scene.selectedItems()
