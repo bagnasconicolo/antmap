@@ -1123,7 +1123,8 @@ class StyleEditor(QWidget):
         self.border_btn.clicked.connect(self.choose_border_color)
         self.arrow_start_btn.clicked.connect(self.apply_changes)
         self.arrow_end_btn.clicked.connect(self.apply_changes)
-        self.setEnabled(False)
+        # Disable individual controls until a selectable item is chosen
+        self.enable_node_controls(False)
 
     def set_node(self, node: Optional[NodeItem]) -> None:
         """Set the node currently being edited."""
@@ -1271,12 +1272,18 @@ class ConceptMapEditor(QMainWindow):
         self.save_act = QAction("Salva", self)
         self.save_as_act = QAction("Salva come…", self)
         self.exit_act = QAction("Esci", self)
+        self.zoom_in_act = QAction("Zoom in", self)
+        self.zoom_in_act.setShortcut(QKeySequence.ZoomIn)
+        self.zoom_out_act = QAction("Zoom out", self)
+        self.zoom_out_act.setShortcut(QKeySequence.ZoomOut)
         # Connect actions
         self.new_act.triggered.connect(self.new_file)
         self.open_act.triggered.connect(self.open_file)
         self.save_act.triggered.connect(self.save_file)
         self.save_as_act.triggered.connect(self.save_file_as)
         self.exit_act.triggered.connect(self.close)
+        self.zoom_in_act.triggered.connect(self.zoom_in)
+        self.zoom_out_act.triggered.connect(self.zoom_out)
 
     def _create_menu(self) -> None:
         menubar = self.menuBar()
@@ -1287,6 +1294,17 @@ class ConceptMapEditor(QMainWindow):
         file_menu.addAction(self.save_as_act)
         file_menu.addSeparator()
         file_menu.addAction(self.exit_act)
+        view_menu = menubar.addMenu("Vista")
+        view_menu.addAction(self.zoom_in_act)
+        view_menu.addAction(self.zoom_out_act)
+
+    def zoom_in(self) -> None:
+        """Zoom into the scene."""
+        self.view.scale(1.2, 1.2)
+
+    def zoom_out(self) -> None:
+        """Zoom out of the scene."""
+        self.view.scale(1 / 1.2, 1 / 1.2)
 
     def clear_scene(self) -> None:
         """Remove all items from scene and reset state."""
@@ -1547,22 +1565,22 @@ class ConceptMapEditor(QMainWindow):
         """Handle interactive creation of connections and new concepts."""
         etype = event.type()
         if etype == QEvent.GraphicsSceneMousePress:
-            # Reset any temporary items
-            if self.temp_new_node is not None:
+            # Reset any temporary items while ensuring existing nodes remain
+            if self.temp_new_node is not None and self.temp_new_node not in self.node_items.values():
                 try:
                     if self.temp_new_node.scene() is not None:
                         self.scene.removeItem(self.temp_new_node)
                 except RuntimeError:
                     pass
-                self.temp_new_node = None
+            self.temp_new_node = None
             if self.temp_connection is not None:
                 try:
                     if self.temp_connection.scene() is not None:
                         self.scene.removeItem(self.temp_connection)
                 except RuntimeError:
                     pass
-                self.temp_connection = None
-            for n in self.node_items.values():
+            self.temp_connection = None
+            for n in list(self.node_items.values()):
                 n.hide_anchor_points()
             return
         if etype == QEvent.GraphicsSceneMouseMove:
