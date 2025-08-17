@@ -761,6 +761,13 @@ class NodeItem(QGraphicsObject):
         # Children: label item
         self.label_item = EditableTextItem(self)
         self.label_item.setZValue(1)
+        # Prevent the internal label item from being selected independently
+        # of its parent node.  When the label could be selected, the scene
+        # reported multiple selected items (the node and its label), which
+        # left the styling panel disabled.  Disabling selection and mouse
+        # events on the label keeps the node as the sole selected item.
+        self.label_item.setFlag(QGraphicsItem.ItemIsSelectable, False)
+        self.label_item.setAcceptedMouseButtons(Qt.NoButton)
         # Resizing handle (bottom right)
         self.handle_size = 8
         self.resizing = False
@@ -1306,14 +1313,19 @@ class StyleEditor(QWidget):
 
     def set_connection(self, conn: Optional[ConnectionItem]) -> None:
         self.current_connection = conn
-        self.current_node = None
-        self.enable_node_controls(False)
-        # Keep the style editor itself enabled
-        self.setEnabled(True)
+        # Clearing the connection should not wipe out an active node selection,
+        # so only reset node-specific state when an actual connection is
+        # provided.  Previously, calling ``set_connection(None)`` disabled all
+        # node controls, leaving the styling panel unusable after selecting a
+        # node.
         if conn is None:
             self.arrow_start_btn.hide()
             self.arrow_end_btn.hide()
             return
+        self.current_node = None
+        self.enable_node_controls(False)
+        # Keep the style editor itself enabled
+        self.setEnabled(True)
         self.arrow_start_btn.show()
         self.arrow_end_btn.show()
         self.arrow_start_btn.setChecked(conn.arrow_start)
@@ -1681,24 +1693,20 @@ class ConceptMapEditor(QMainWindow):
 
     def selection_changed(self) -> None:
         items = self.scene.selectedItems()
-        if len(items) == 1:
-            item = items[0]
-            if isinstance(item, NodeItem):
-                self.style_editor.set_node(item)
-                self.style_editor.set_connection(None)
-                self.dock.show()
-            elif isinstance(item, ConnectionItem):
-                self.style_editor.set_node(None)
-                self.style_editor.set_connection(item)
-                self.dock.show()
-            else:
-                self.style_editor.set_node(None)
-                self.style_editor.set_connection(None)
-                self.dock.show()
-        else:
-            self.style_editor.set_node(None)
+        node_items = [i for i in items if isinstance(i, NodeItem)]
+        conn_items = [i for i in items if isinstance(i, ConnectionItem)]
+        if len(node_items) == 1 and not conn_items:
+            # Clear any previous connection selection before applying the node
+            # selection to avoid wiping node controls inside the style editor.
             self.style_editor.set_connection(None)
-            self.dock.show()
+            self.style_editor.set_node(node_items[0])
+        elif len(conn_items) == 1 and not node_items:
+            self.style_editor.set_node(None)
+            self.style_editor.set_connection(conn_items[0])
+        else:
+            self.style_editor.set_connection(None)
+            self.style_editor.set_node(None)
+        self.dock.show()
         # Keep dock always enabled
         self.dock.setEnabled(True)
 
