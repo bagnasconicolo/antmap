@@ -728,10 +728,19 @@ class EditableTextItem(QGraphicsTextItem):
         if getattr(node.data, "font_underline", False):
             font.setUnderline(True)
         self.setFont(font)
+        # Start with text interaction disabled so that clicking the node
+        # does not interact with the label directly.  Interaction is
+        # temporarily enabled when the user edits the label.
         self.setTextInteractionFlags(Qt.NoTextInteraction)
 
     def focusOutEvent(self, event) -> None:
+        # When editing finishes, revert the label item to a passive state so
+        # it doesn't become an additional selected item in the scene.  If the
+        # label remains selectable, the scene reports two selected items (the
+        # node and its label) which disables the style editor dock.
         self.setTextInteractionFlags(Qt.NoTextInteraction)
+        self.setFlag(QGraphicsItem.ItemIsSelectable, False)
+        self.setAcceptedMouseButtons(Qt.NoButton)
         self.node.finish_editing(self.toPlainText())
         super().focusOutEvent(event)
 
@@ -1026,7 +1035,14 @@ class NodeItem(QGraphicsObject):
 
     def mouseDoubleClickEvent(self, event):
         if event.button() == Qt.LeftButton:
+            # Allow the embedded label to receive mouse events only while the
+            # user is actively editing the text.  This prevents the label from
+            # being treated as a separately selectable item once editing is
+            # finished, which previously caused the side styling panel to stay
+            # disabled.
+            self.label_item.setAcceptedMouseButtons(Qt.LeftButton)
             self.label_item.setTextInteractionFlags(Qt.TextEditorInteraction)
+            self.label_item.setFlag(QGraphicsItem.ItemIsSelectable, False)
             self.label_item.setFocus(Qt.MouseFocusReason)
             cursor = self.label_item.textCursor()
             cursor.select(QTextCursor.Document)
