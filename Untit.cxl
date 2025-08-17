@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<cmap xmlns:dcterms="http://purl.org/dc/terms/" xmlns="http://cmap.ihmc.us/xml/cmap/" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:vcard="http://www.w3.org/2001/vcard-rdf/3.0#">
+    <res-meta>
+        <dc:title>Untitled 1 2</dc:title>
+        <dc:creator>
+            <vcard:FN>Nicol&#xf2; Bagnasco</vcard:FN>
+        </dc:creator>
+        <dcterms:created>2024-10-06T19:44:53+02:00</dcterms:created>
+        <dcterms:modified>2024-10-06T19:44:53+02:00</dcterms:modified>
+        <dc:language>en</dc:language>
+        <dc:format>x-cmap/x-storable</dc:format>
+        <dc:publisher>FIHMC CmapTools 6.04</dc:publisher>
+        <dc:extent>6415 bytes</dc:extent>
+        <dc:source>cmap:1YMMLDW8Q-K8HZ80-1:1VVGTWZNB-LGKD35-Z:20T9B4B0Q-8GRJ12-4F</dc:source>
+    </res-meta>
+    <map width="579" height="623">
+        <concept-list>
+            <concept id="1ZNJRSDK9-NKSLSK-1LL" label="&quot;Japanese Monkey Fish Style&quot;&#xa;= Horniman Mermaid&#xa;&quot;J&quot;"/>
+            <concept id="1ZNJRFMLH-1SQ38KP-9D" label="FeeJee Mermaid"/>
+            <concept id="1ZNJRHNQR-1Z97YX1-W6" label="Munch-like&#xa;&quot;M&quot;"/>
+            <concept id="1ZNJRG85Q-11JMCZ8-SW" label="Sdraiata/Prone&#xa;&quot;P&quot;"/>
+            <concept id="1ZNJRH5F7-29DZW99-VD" label="Ningyo&#xa;&quot;N&quot;"/>
+            <concept id="1ZNJRLGQS-KX14LW-15J" label="Pari/Even&#xa;&quot;E&quot;"/>
+            <concept id="1ZNJRN4T3-WSQX9B-1C8" label="Angolo Testa-Corpo"/>
+            <concept id="1ZNJRPM9X-1B0VG77-1FP" label="Vertebre sporgenti&#xa;&quot;Sawtooth&quot; &#xa;&quot;S&quot;"/>
+            <concept id="1ZNJRK781-21JQLZL-10L" label="Sfalsate/Staggered&#xa;&quot;S&quot;"/>
+            <concept id="1ZNJS5420-17FS7P2-7Q8" label="Scrittura in negativo&#xa;Ex. &quot;Tutti tranne gomiti&quot;&#xa;&quot;A-E&quot;"/>
+            <concept id="1ZNJS0PM0-1TQN35C-7CK" label="Numero di costole"/>
+            <concept id="1ZNJRNQ46-1T2JBYP-1DM" label="0 - 45 - 90"/>
+            <concept id="1ZNJS1G7K-5QB82C-7FL" label="Testa &quot;T&quot;&#xa;Mani &quot;M&quot;&#xa;Gomiti &quot;E&quot;&#xa;Spalle &quot;S&quot;&#xa;Giunzione &quot;G&quot;&#xa;Dorso &quot;D&quot;&#xa;Barba/Baffi &quot;B&quot;&#xa;Tutti &quot;A&quot;&#xa;Nessuno &quot;N&quot;"/>
+            <concept id="1ZNJRZJB3-5LGVM8-77C" label="Posizione dei Peli"/>
+        </concept-list>
+        <linking-phrase-list>
+            <linking-phrase id="1ZNJRG85Y-248F4MD-SZ" label="Type"/>
+            <linking-phrase id="1ZNJRK78C-D23WK5-10P" label="braccia"/>
+            <linking-phrase id="1ZNJRQR2G-56M6ZG-1JD" label="Trattino/Dash &quot;-&quot;"/>
+        </linking-phrase-list>
+        <connection-list>
+            <connection id="1ZNJRHNR1-26VCQ6T-W9" from-id="1ZNJRH5F7-29DZW99-VD" to-id="1ZNJRHNQR-1Z97YX1-W6"/>
+            <connection id="1ZNJS0PM6-CLWRDT-7CN" from-id="1ZNJRZJB3-5LGVM8-77C" to-id="1ZNJS0PM0-1TQN35C-7CK"/>
+            <connection id="1ZNJRQ8N9-12J4NTH-1HC" from-id="1ZNJRLGQS-KX14LW-15J" to-id="1ZNJRPM9X-1B0VG77-1FP"/>
+            <connection id="1ZNJRK78G-14L19RL-10S" from-id="1ZNJRG85Q-11JMCZ8-SW" to-id="1ZNJRK78C-D23WK5-10P"/>
+            <connection id="1ZNJRPMB3-2DPQLH1-1FS" from-id="1ZNJRK781-21JQLZL-10L" to-id="1ZNJRPM9X-1B0VG77-1FP"/>
+            <connection id="1ZNJRX3YJ-2D7YBNH-2BF" from-id="1ZNJRSDK9-NKSLSK-1LL" to-id="1ZNJRQR2G-56M6ZG-1JD"/>
+            <connection id="1ZNJRLGQX-13JKKGF-15M" from-id="1ZNJRK78C-D23WK5-10P" to-id="1ZNJRLGQS-KX14LW-15J"/>
+            <connection id="1ZNJRQR2M-1R9MGML-1JN" from-id="1ZNJRQR2G-56M6ZG-1JD" to-id="1ZNJRN4T3-WSQX9B-1C8"/>
+            <connection id="1ZNJRH5FF-NXN09T-VH" from-id="1ZNJRG85Y-248F4MD-SZ" to-id="1ZNJRH5F7-29DZW99-VD"/>
+            <connection id="1ZNJRG861-1YK7TNH-T3" from-id="1ZNJRFMLH-1SQ38KP-9D" to-id="1ZNJRG85Y-248F4MD-SZ"/>
+            <connection id="1ZNJRQR2L-L6JGF4-1JH" from-id="1ZNJRK781-21JQLZL-10L" to-id="1ZNJRQR2G-56M6ZG-1JD"/>
+            <connection id="1ZNJRZJB8-1KT9T6-77G" from-id="1ZNJRNQ46-1T2JBYP-1DM" to-id="1ZNJRZJB3-5LGVM8-77C"/>
+            <connection id="1ZNJRNQ4C-2CH7JBC-1DQ" from-id="1ZNJRN4T3-WSQX9B-1C8" to-id="1ZNJRNQ46-1T2JBYP-1DM"/>
+            <connection id="1ZNJRK78H-4DPMTQ-10Z" from-id="1ZNJRK78C-D23WK5-10P" to-id="1ZNJRK781-21JQLZL-10L"/>
+            <connection id="1ZNJRG862-26KVWSN-T9" from-id="1ZNJRG85Y-248F4MD-SZ" to-id="1ZNJRG85Q-11JMCZ8-SW"/>
+            <connection id="1ZNJS5426-1L99KSQ-7QC" from-id="1ZNJS1G7K-5QB82C-7FL" to-id="1ZNJS5420-17FS7P2-7Q8"/>
+            <connection id="1ZNJRR932-K4TCMF-1KW" from-id="1ZNJRPM9X-1B0VG77-1FP" to-id="1ZNJRQR2G-56M6ZG-1JD"/>
+            <connection id="1ZNJS1G7T-255Y9YG-7FP" from-id="1ZNJRZJB3-5LGVM8-77C" to-id="1ZNJS1G7K-5QB82C-7FL"/>
+            <connection id="1ZNJRSDKH-22NMGHH-1LP" from-id="1ZNJRLGQS-KX14LW-15J" to-id="1ZNJRSDK9-NKSLSK-1LL"/>
+        </connection-list>
+        <concept-appearance-list>
+            <concept-appearance id="1ZNJRSDK9-NKSLSK-1LL" x="519" y="308" width="187" height="54" font-name="Baskerville" font-style="bold">
+                <localized-style begin="31" end="51" font-style="italic"/>
+            </concept-appearance>
+            <concept-appearance id="1ZNJRFMLH-1SQ38KP-9D" x="444" y="33" width="140" height="31" font-name="Baskerville" font-size="16" font-style="bold" background-color="255,255,150,255"/>
+            <concept-appearance id="1ZNJRHNQR-1Z97YX1-W6" x="550" y="180" width="81" height="38" font-name="Baskerville" font-style="bold"/>
+            <concept-appearance id="1ZNJRG85Q-11JMCZ8-SW" x="320" y="111" width="106" height="38" font-name="Baskerville" font-style="bold"/>
+            <concept-appearance id="1ZNJRH5F7-29DZW99-VD" x="552" y="110" width="56" height="38" font-name="Baskerville" font-style="bold"/>
+            <concept-appearance id="1ZNJRLGQS-KX14LW-15J" x="376" y="208" width="75" height="38" font-name="Baskerville" font-style="bold"/>
+            <concept-appearance id="1ZNJRN4T3-WSQX9B-1C8" x="244" y="453" width="129" height="27" font-name="Baskerville" font-style="bold"/>
+            <concept-appearance id="1ZNJRPM9X-1B0VG77-1FP" x="328" y="310" width="124" height="52" font-name="Baskerville" font-style="bold"/>
+            <concept-appearance id="1ZNJRK781-21JQLZL-10L" x="244" y="209" width="125" height="38" font-name="Baskerville" font-style="bold"/>
+            <concept-appearance id="1ZNJS5420-17FS7P2-7Q8" x="676" y="571" width="160" height="52" font-name="Baskerville" font-size="12" font-style="bold" background-color="237,244,246,255"/>
+            <concept-appearance id="1ZNJS0PM0-1TQN35C-7CK" x="665" y="457" width="120" height="24" font-name="Baskerville" font-size="12" font-style="bold"/>
+            <concept-appearance id="1ZNJRNQ46-1T2JBYP-1DM" x="374" y="455" width="69" height="24" font-name="Baskerville" font-style="bold"/>
+            <concept-appearance id="1ZNJS1G7K-5QB82C-7FL" x="501" y="571" width="110" height="135" font-name="Baskerville" font-size="12" font-style="bold"/>
+            <concept-appearance id="1ZNJRZJB3-5LGVM8-77C" x="502" y="455" width="116" height="24" font-name="Baskerville" font-size="12" font-style="bold"/>
+        </concept-appearance-list>
+        <linking-phrase-appearance-list>
+            <linking-phrase-appearance id="1ZNJRG85Y-248F4MD-SZ" x="444" y="74" width="31" height="13"/>
+            <linking-phrase-appearance id="1ZNJRK78C-D23WK5-10P" x="317" y="155" width="45" height="11"/>
+            <linking-phrase-appearance id="1ZNJRQR2G-56M6ZG-1JD" x="245" y="403" width="106" height="13"/>
+        </linking-phrase-appearance-list>
+        <connection-appearance-list>
+            <connection-appearance id="1ZNJRHNR1-26VCQ6T-W9" from-pos="center" to-pos="center" arrowhead="if-to-concept"/>
+            <connection-appearance id="1ZNJS0PM6-CLWRDT-7CN" from-pos="center" to-pos="center" arrowhead="if-to-concept"/>
+            <connection-appearance id="1ZNJRQ8N9-12J4NTH-1HC" from-pos="center" to-pos="top" arrowhead="if-to-concept"/>
+            <connection-appearance id="1ZNJRK78G-14L19RL-10S" from-pos="center" to-pos="center" arrowhead="if-to-concept"/>
+            <connection-appearance id="1ZNJRPMB3-2DPQLH1-1FS" from-pos="center" to-pos="center" arrowhead="if-to-concept"/>
+            <connection-appearance id="1ZNJRX3YJ-2D7YBNH-2BF" from-pos="center" to-pos="center" arrowhead="if-to-concept"/>
+            <connection-appearance id="1ZNJRLGQX-13JKKGF-15M" from-pos="center" to-pos="center" arrowhead="if-to-concept"/>
+            <connection-appearance id="1ZNJRQR2M-1R9MGML-1JN" from-pos="center" to-pos="center" arrowhead="if-to-concept"/>
+            <connection-appearance id="1ZNJRH5FF-NXN09T-VH" from-pos="center" to-pos="center" arrowhead="if-to-concept"/>
+            <connection-appearance id="1ZNJRG861-1YK7TNH-T3" from-pos="center" to-pos="center" arrowhead="if-to-concept"/>
+            <connection-appearance id="1ZNJRQR2L-L6JGF4-1JH" from-pos="center" to-pos="center" arrowhead="if-to-concept"/>
+            <connection-appearance id="1ZNJRZJB8-1KT9T6-77G" from-pos="center" to-pos="center" arrowhead="if-to-concept"/>
+            <connection-appearance id="1ZNJRNQ4C-2CH7JBC-1DQ" from-pos="center" to-pos="center" arrowhead="if-to-concept"/>
+            <connection-appearance id="1ZNJRK78H-4DPMTQ-10Z" from-pos="center" to-pos="center" arrowhead="if-to-concept"/>
+            <connection-appearance id="1ZNJRG862-26KVWSN-T9" from-pos="center" to-pos="center" arrowhead="if-to-concept"/>
+            <connection-appearance id="1ZNJS5426-1L99KSQ-7QC" from-pos="center" to-pos="center" arrowhead="if-to-concept"/>
+            <connection-appearance id="1ZNJRR932-K4TCMF-1KW" from-pos="center" to-pos="center" arrowhead="if-to-concept"/>
+            <connection-appearance id="1ZNJS1G7T-255Y9YG-7FP" from-pos="center" to-pos="center" arrowhead="if-to-concept"/>
+            <connection-appearance id="1ZNJRSDKH-22NMGHH-1LP" from-pos="center" to-pos="center" arrowhead="if-to-concept"/>
+        </connection-appearance-list>
+        <style-sheet-list>
+            <style-sheet id="_Default_">
+                <map-style background-color="255,255,255,0"/>
+                <concept-style font-name="Verdana" font-size="12" font-style="plain" font-color="0,0,0,255" text-margin="4" background-color="237,244,246,255" background-image-style="full" border-color="0,0,0,255" border-style="solid" border-thickness="1"
+                    border-shape="rounded-rectangle" border-shape-rrarc="15.0" text-alignment="center" shadow-color="none" min-width="-1" min-height="-1" max-width="-1.0"/>
+                <linking-phrase-style font-name="Verdana" font-size="12" font-style="plain" font-color="0,0,0,255" text-margin="1" background-color="0,0,255,0" background-image-style="full" border-color="0,0,0,0" border-style="solid" border-thickness="1"
+                    border-shape="rectangle" border-shape-rrarc="15.0" text-alignment="center" shadow-color="none"/>
+                <connection-style color="0,0,0,255" style="solid" thickness="1" type="straight" arrowhead="if-to-concept-and-slopes-up"/>
+                <resource-style font-name="SanSerif" font-size="12" font-style="plain" font-color="0,0,0,255" background-color="192,192,192,255"/>
+            </style-sheet>
+            <style-sheet id="_LatestChanges_">
+                <concept-style font-name="Baskerville" font-size="12" font-style="bold" background-color="237,244,246,255"/>
+                <connection-style arrowhead="if-to-concept"/>
+            </style-sheet>
+        </style-sheet-list>
+        <extra-graphical-properties-list>
+            <properties-list id="20T9B4B0Q-8GRJ12-4F">
+                <property key="StyleSheetGroup_0" value="//*@!#$%%^&amp;*()() No Grouped StyleSheets @"/>
+            </properties-list>
+        </extra-graphical-properties-list>
+    </map>
+</cmap>
