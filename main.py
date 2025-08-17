@@ -1512,12 +1512,18 @@ class ConceptMapEditor(QMainWindow):
         if etype == QEvent.GraphicsSceneMousePress:
             # Reset any temporary items
             if self.temp_new_node is not None:
-                if self.temp_new_node.scene() is not None:
-                    self.scene.removeItem(self.temp_new_node)
+                try:
+                    if self.temp_new_node.scene() is not None:
+                        self.scene.removeItem(self.temp_new_node)
+                except RuntimeError:
+                    pass
                 self.temp_new_node = None
             if self.temp_connection is not None:
-                if self.temp_connection.scene() is not None:
-                    self.scene.removeItem(self.temp_connection)
+                try:
+                    if self.temp_connection.scene() is not None:
+                        self.scene.removeItem(self.temp_connection)
+                except RuntimeError:
+                    pass
                 self.temp_connection = None
             for n in self.node_items.values():
                 n.hide_anchor_points()
