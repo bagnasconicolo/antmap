@@ -598,11 +598,12 @@ class AnchorHandle(QGraphicsEllipseItem):
         else:
             node = self.connection.dest
         pos = self.scenePos()
-        # Find nearest anchor index
+        # Find nearest anchor index (convert anchors to scene coordinates)
         min_dist = None
         best_index = 0
         for i, anchor in enumerate(node.anchor_positions()):
-            d = (anchor - pos).manhattanLength()
+            anchor_scene = node.mapToScene(anchor)
+            d = (anchor_scene - pos).manhattanLength()
             if min_dist is None or d < min_dist:
                 min_dist = d
                 best_index = i
@@ -739,44 +740,58 @@ class NodeItem(QGraphicsObject):
         painter.drawEllipse(QPointF(ch_x + ch_size / 2, ch_y + ch_size / 2), ch_size / 2, ch_size / 2)
 
     def anchor_positions(self) -> List[QPointF]:
-        """Return available anchor points on the node for connections."""
+        """Return available anchor points on the node for connections.
+
+        The node exposes a grid of anchor points along each edge so that
+        connection lines can be attached with fine granularity.  We divide
+        each side into six segments which yields seven anchor points along
+        the top and bottom edges and five additional points along the left
+        and right edges (excluding the corners which are already provided by
+        the top/bottom loops).  In total this provides twenty-four possible
+        anchors.
+        """
         w = self.data.width
         h = self.data.height
-        anchors: List[QPointF] = [
-            QPointF(w / 2, 0),            # top centre (default)
-            QPointF(w / 2, h),            # bottom centre (default)
-            QPointF(0, h / 2),            # left centre (default)
-            QPointF(w, h / 2),            # right centre (default)
-        ]
+        anchors: List[QPointF] = []
+        divisions = 6  # number of segments per side
 
-        # Additional evenly spaced anchors along each side to allow
-        # finer control when reassigning connection lines. We add two
-        # extra points per side plus the four corners, giving five
-        # hotspots per side (corners are shared).
-        step_w = w / 3
-        step_h = h / 3
-
-        for i in (1, 2):  # interior points on top and bottom edges
-            x = step_w * i
+        # Top and bottom edges including corners
+        for i in range(divisions + 1):
+            x = w * i / divisions
             anchors.append(QPointF(x, 0))
             anchors.append(QPointF(x, h))
 
-        # Corners
-        anchors.extend(
-            [
-                QPointF(0, 0),
-                QPointF(w, 0),
-                QPointF(0, h),
-                QPointF(w, h),
-            ]
-        )
-
-        for i in (1, 2):  # interior points on left and right edges
-            y = step_h * i
+        # Left and right edges excluding corners (already added above)
+        for i in range(1, divisions):
+            y = h * i / divisions
             anchors.append(QPointF(0, y))
             anchors.append(QPointF(w, y))
 
         return anchors
+
+    def show_anchor_points(self) -> None:
+        """Display visual markers for all anchor positions."""
+        if hasattr(self, "_anchor_markers") and self._anchor_markers:
+            positions = self.anchor_positions()
+            for marker, pos in zip(self._anchor_markers, positions):
+                marker.setPos(pos)
+                marker.show()
+            return
+        self._anchor_markers: List[QGraphicsEllipseItem] = []
+        for pos in self.anchor_positions():
+            marker = QGraphicsEllipseItem(-3, -3, 6, 6, self)
+            marker.setBrush(QBrush(QColor("#00AEEF")))
+            marker.setPen(Qt.NoPen)
+            marker.setZValue(1000)
+            marker.setPos(pos)
+            self._anchor_markers.append(marker)
+
+    def hide_anchor_points(self) -> None:
+        """Hide previously shown anchor markers."""
+        if not hasattr(self, "_anchor_markers"):
+            return
+        for marker in self._anchor_markers:
+            marker.hide()
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
@@ -956,6 +971,9 @@ class ConnectionItem(QGraphicsLineItem):
         d_anchor = self.dest.anchor_positions()[self.dest_anchor]
         self.source_handle.setPos(self.source.mapToScene(s_anchor))
         self.dest_handle.setPos(self.dest.mapToScene(d_anchor))
+        # Show all available anchor positions on both nodes for guidance
+        self.source.show_anchor_points()
+        self.dest.show_anchor_points()
 
     def hide_anchor_handles(self):
         """Remove anchor handles from scene."""
@@ -966,6 +984,9 @@ class ConnectionItem(QGraphicsLineItem):
                 scene.removeItem(self.dest_handle)
             self.source_handle = None
             self.dest_handle = None
+        # Hide anchor indicators
+        self.source.hide_anchor_points()
+        self.dest.hide_anchor_points()
 
     def paint(self, painter, option, widget=None):
         pen = QPen(QColor("#000000"), 1)
@@ -1066,6 +1087,7 @@ class StyleEditor(QWidget):
         self.border_btn.clicked.connect(self.choose_border_color)
         self.arrow_start_btn.clicked.connect(self.apply_changes)
         self.arrow_end_btn.clicked.connect(self.apply_changes)
+        self.setEnabled(False)
 
     def set_node(self, node: Optional[NodeItem]) -> None:
         """Set the node currently being edited."""
@@ -1074,6 +1096,7 @@ class StyleEditor(QWidget):
         self.arrow_start_btn.hide()
         self.arrow_end_btn.hide()
         self.enable_node_controls(node is not None)
+        self.setEnabled(node is not None)
         if node is None:
             self.label_edit.setText("")
             self.font_combo.setCurrentFont(QFont("Verdana"))
@@ -1097,6 +1120,7 @@ class StyleEditor(QWidget):
         self.current_connection = conn
         self.current_node = None
         self.enable_node_controls(False)
+        self.setEnabled(conn is not None)
         if conn is None:
             self.arrow_start_btn.hide()
             self.arrow_end_btn.hide()
@@ -1429,6 +1453,7 @@ class ConceptMapEditor(QMainWindow):
             self.style_editor.set_node(None)
             self.style_editor.set_connection(None)
             self.dock.show()
+        self.dock.setEnabled(self.style_editor.isEnabled())
 
     def keyPressEvent(self, event) -> None:
         if event.matches(QKeySequence.Undo):
@@ -1489,6 +1514,8 @@ class ConceptMapEditor(QMainWindow):
             if self.temp_connection is not None:
                 self.scene.removeItem(self.temp_connection)
                 self.temp_connection = None
+            for n in self.node_items.values():
+                n.hide_anchor_points()
             return
         if etype == QEvent.GraphicsSceneMouseMove:
             pos = event.scenePos()
@@ -1515,6 +1542,9 @@ class ConceptMapEditor(QMainWindow):
                 self.temp_new_node.setPos(pos)
                 self.temp_connection = ConnectionItem(source_node, 0, self.temp_new_node, 0)
                 self.scene.addItem(self.temp_connection)
+                # Show anchor points on all nodes for guidance
+                for n in self.node_items.values():
+                    n.show_anchor_points()
             else:
                 self.temp_new_node.setPos(pos)
                 if self.temp_connection:
@@ -1564,74 +1594,78 @@ class ConceptMapEditor(QMainWindow):
                         conn2 = ConnectionItem(linker_item, 1, dest_item, 0)
                         self.scene.addItem(conn1)
                         self.scene.addItem(conn2)
-                        self.connection_items.extend([conn1, conn2])
-                    else:
-                        conn = ConnectionItem(source_node, 0, dest_item, 0)
-                        self.scene.addItem(conn)
-                        self.connection_items.append(conn)
-                    self.update_model_from_scene()
-                    return
-                # Finalise new concept
-                cid = str(uuid.uuid4())
-                self.temp_new_node.data.id = cid
-                self.temp_new_node.data.x = pos.x()
-                self.temp_new_node.data.y = pos.y()
-                self.document.concepts[cid] = self.temp_new_node.data
-                self.node_items[cid] = self.temp_new_node
-                if source_node.data.is_linker:
-                    use_linker = False
-                else:
-                    modifiers = QApplication.keyboardModifiers()
-                    use_linker = not (modifiers & Qt.ShiftModifier)
-                if use_linker:
-                    lid = str(uuid.uuid4())
-                    style_l = self.document.default_linker_style if self.document.default_linker_style else self.document.default_concept_style
-                    ldata = ConceptData(
-                        lid, "????",
-                        (source_node.pos().x() + self.temp_new_node.pos().x()) / 2,
-                        (source_node.pos().y() + self.temp_new_node.pos().y()) / 2,
-                        90, 20,
-                        font_family=style_l.get("font-name", "Verdana"),
-                        font_size=float(style_l.get("font-size", "12")),
-                        font_color=self.document._parse_color(style_l.get("font-color", "0,0,0,255")),
-                        fill_color=self.document._parse_color(style_l.get("background-color", "237,244,246,255")),
-                        border_color=self.document._parse_color(style_l.get("border-color", "0,0,0,255")),
-                        border_width=float(style_l.get("border-thickness", "1")),
-                        is_linker=True
-                    )
-                    self.document.concepts[lid] = ldata
-                    linker_item2 = NodeItem(ldata, self.scene)
-                    linker_item2.request_connection.connect(self.handle_connection_request)
-                    linker_item2.node_moved.connect(self.node_moved)
-                    linker_item2.node_selected.connect(self.node_selected)
-                    self.scene.addItem(linker_item2)
-                    self.node_items[lid] = linker_item2
-                    if self.temp_connection:
-                        self.scene.removeItem(self.temp_connection)
-                    conn1 = ConnectionItem(source_node, 0, linker_item2, 0)
-                    conn2 = ConnectionItem(linker_item2, 1, self.temp_new_node, 0)
-                    self.scene.addItem(conn1)
-                    self.scene.addItem(conn2)
                     self.connection_items.extend([conn1, conn2])
                 else:
-                    if self.temp_connection:
-                        self.connection_items.append(self.temp_connection)
-                    else:
-                        conn = ConnectionItem(source_node, 0, self.temp_new_node, 0)
-                        self.scene.addItem(conn)
-                        self.connection_items.append(conn)
-                self.temp_new_node = None
-                self.temp_connection = None
+                    conn = ConnectionItem(source_node, 0, dest_item, 0)
+                    self.scene.addItem(conn)
+                    self.connection_items.append(conn)
+                for n in self.node_items.values():
+                    n.hide_anchor_points()
                 self.update_model_from_scene()
                 return
-            # No temp node: maybe connecting existing nodes directly
-            if isinstance(dest_item, NodeItem) and dest_item is not source_node:
-                self.push_undo_state()
-                if dest_item.data.is_linker or source_node.data.is_linker:
-                    use_linker = False
+            # Finalise new concept
+            cid = str(uuid.uuid4())
+            self.temp_new_node.data.id = cid
+            self.temp_new_node.data.x = pos.x()
+            self.temp_new_node.data.y = pos.y()
+            self.document.concepts[cid] = self.temp_new_node.data
+            self.node_items[cid] = self.temp_new_node
+            if source_node.data.is_linker:
+                use_linker = False
+            else:
+                modifiers = QApplication.keyboardModifiers()
+                use_linker = not (modifiers & Qt.ShiftModifier)
+            if use_linker:
+                lid = str(uuid.uuid4())
+                style_l = self.document.default_linker_style if self.document.default_linker_style else self.document.default_concept_style
+                ldata = ConceptData(
+                    lid, "????",
+                    (source_node.pos().x() + self.temp_new_node.pos().x()) / 2,
+                    (source_node.pos().y() + self.temp_new_node.pos().y()) / 2,
+                    90, 20,
+                    font_family=style_l.get("font-name", "Verdana"),
+                    font_size=float(style_l.get("font-size", "12")),
+                    font_color=self.document._parse_color(style_l.get("font-color", "0,0,0,255")),
+                    fill_color=self.document._parse_color(style_l.get("background-color", "237,244,246,255")),
+                    border_color=self.document._parse_color(style_l.get("border-color", "0,0,0,255")),
+                    border_width=float(style_l.get("border-thickness", "1")),
+                    is_linker=True
+                )
+                self.document.concepts[lid] = ldata
+                linker_item2 = NodeItem(ldata, self.scene)
+                linker_item2.request_connection.connect(self.handle_connection_request)
+                linker_item2.node_moved.connect(self.node_moved)
+                linker_item2.node_selected.connect(self.node_selected)
+                self.scene.addItem(linker_item2)
+                self.node_items[lid] = linker_item2
+                if self.temp_connection:
+                    self.scene.removeItem(self.temp_connection)
+                conn1 = ConnectionItem(source_node, 0, linker_item2, 0)
+                conn2 = ConnectionItem(linker_item2, 1, self.temp_new_node, 0)
+                self.scene.addItem(conn1)
+                self.scene.addItem(conn2)
+                self.connection_items.extend([conn1, conn2])
+            else:
+                if self.temp_connection:
+                    self.connection_items.append(self.temp_connection)
                 else:
-                    modifiers = QApplication.keyboardModifiers()
-                    use_linker = not (modifiers & Qt.ShiftModifier)
+                    conn = ConnectionItem(source_node, 0, self.temp_new_node, 0)
+                    self.scene.addItem(conn)
+                    self.connection_items.append(conn)
+            self.temp_new_node = None
+            self.temp_connection = None
+            for n in self.node_items.values():
+                n.hide_anchor_points()
+            self.update_model_from_scene()
+            return
+        # No temp node: maybe connecting existing nodes directly
+        if isinstance(dest_item, NodeItem) and dest_item is not source_node:
+            self.push_undo_state()
+            if dest_item.data.is_linker or source_node.data.is_linker:
+                use_linker = False
+            else:
+                modifiers = QApplication.keyboardModifiers()
+                use_linker = not (modifiers & Qt.ShiftModifier)
                 if use_linker:
                     lid = str(uuid.uuid4())
                     style = self.document.default_linker_style if self.document.default_linker_style else self.document.default_concept_style
@@ -1664,8 +1698,13 @@ class ConceptMapEditor(QMainWindow):
                     conn = ConnectionItem(source_node, 0, dest_item, 0)
                     self.scene.addItem(conn)
                     self.connection_items.append(conn)
+                for n in self.node_items.values():
+                    n.hide_anchor_points()
                 self.update_model_from_scene()
-            return
+        else:
+            for n in self.node_items.values():
+                n.hide_anchor_points()
+        return
 
     def node_moved(self, node: NodeItem) -> None:
         """Update style editor when node moves; reserved for future use."""
