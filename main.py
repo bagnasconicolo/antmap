@@ -1111,6 +1111,21 @@ class NodeItem(QGraphicsObject):
             conn.update_position()
 
 
+def closest_anchors(source: NodeItem, dest: NodeItem) -> Tuple[int, int]:
+    """Return anchor indices on source and dest that minimise distance."""
+    best_src, best_dst = 0, 0
+    best_dist = float("inf")
+    for i, s_anchor in enumerate(source.anchor_positions()):
+        s_point = source.mapToScene(s_anchor)
+        for j, d_anchor in enumerate(dest.anchor_positions()):
+            d_point = dest.mapToScene(d_anchor)
+            dist = (s_point - d_point).manhattanLength()
+            if dist < best_dist:
+                best_dist = dist
+                best_src, best_dst = i, j
+    return best_src, best_dst
+
+
 class ConnectionItem(QGraphicsLineItem):
     """Represents a connection line between two nodes."""
 
@@ -2075,11 +2090,15 @@ class ConceptMapEditor(QMainWindow):
                 self.temp_new_node.node_selected.connect(self.node_selected)
                 self.scene.addItem(self.temp_new_node)
                 self.temp_new_node.setPos(pos)
-                self.temp_connection = ConnectionItem(source_node, 0, self.temp_new_node, 0)
+                sa, da = closest_anchors(source_node, self.temp_new_node)
+                self.temp_connection = ConnectionItem(source_node, sa, self.temp_new_node, da)
                 self.scene.addItem(self.temp_connection)
             else:
                 self.temp_new_node.setPos(pos)
                 if self.temp_connection:
+                    sa, da = closest_anchors(source_node, self.temp_new_node)
+                    self.temp_connection.source_anchor = sa
+                    self.temp_connection.dest_anchor = da
                     self.temp_connection.update_position()
             dest_item = self.scene.itemAt(pos, self.view.transform())
             for n in self.node_items.values():
@@ -2133,13 +2152,16 @@ class ConceptMapEditor(QMainWindow):
                         linker_item.node_selected.connect(self.node_selected)
                         self.scene.addItem(linker_item)
                         self.node_items[lid] = linker_item
-                        conn1 = ConnectionItem(source_node, 0, linker_item, 0)
-                        conn2 = ConnectionItem(linker_item, 1, dest_item, 0)
+                        sa1, da1 = closest_anchors(source_node, linker_item)
+                        conn1 = ConnectionItem(source_node, sa1, linker_item, da1)
+                        sa2, da2 = closest_anchors(linker_item, dest_item)
+                        conn2 = ConnectionItem(linker_item, sa2, dest_item, da2)
                         self.scene.addItem(conn1)
                         self.scene.addItem(conn2)
                         self.connection_items.extend([conn1, conn2])
                     else:
-                        conn = ConnectionItem(source_node, 0, dest_item, 0)
+                        sa, da = closest_anchors(source_node, dest_item)
+                        conn = ConnectionItem(source_node, sa, dest_item, da)
                         self.scene.addItem(conn)
                         self.connection_items.append(conn)
                     for n in self.node_items.values():
@@ -2187,16 +2209,23 @@ class ConceptMapEditor(QMainWindow):
                     if self.temp_connection:
                         if self.temp_connection.scene() is not None:
                             self.scene.removeItem(self.temp_connection)
-                    conn1 = ConnectionItem(source_node, 0, linker_item2, 0)
-                    conn2 = ConnectionItem(linker_item2, 1, self.temp_new_node, 0)
+                    sa1, da1 = closest_anchors(source_node, linker_item2)
+                    conn1 = ConnectionItem(source_node, sa1, linker_item2, da1)
+                    sa2, da2 = closest_anchors(linker_item2, self.temp_new_node)
+                    conn2 = ConnectionItem(linker_item2, sa2, self.temp_new_node, da2)
                     self.scene.addItem(conn1)
                     self.scene.addItem(conn2)
                     self.connection_items.extend([conn1, conn2])
                 else:
                     if self.temp_connection:
+                        sa, da = closest_anchors(source_node, self.temp_new_node)
+                        self.temp_connection.source_anchor = sa
+                        self.temp_connection.dest_anchor = da
+                        self.temp_connection.update_position()
                         self.connection_items.append(self.temp_connection)
                     else:
-                        conn = ConnectionItem(source_node, 0, self.temp_new_node, 0)
+                        sa, da = closest_anchors(source_node, self.temp_new_node)
+                        conn = ConnectionItem(source_node, sa, self.temp_new_node, da)
                         self.scene.addItem(conn)
                         self.connection_items.append(conn)
                 self.temp_new_node = None
@@ -2239,13 +2268,16 @@ class ConceptMapEditor(QMainWindow):
                     linker_item.node_selected.connect(self.node_selected)
                     self.scene.addItem(linker_item)
                     self.node_items[lid] = linker_item
-                    conn1 = ConnectionItem(source_node, 0, linker_item, 0)
-                    conn2 = ConnectionItem(linker_item, 1, dest_item, 0)
+                    sa1, da1 = closest_anchors(source_node, linker_item)
+                    conn1 = ConnectionItem(source_node, sa1, linker_item, da1)
+                    sa2, da2 = closest_anchors(linker_item, dest_item)
+                    conn2 = ConnectionItem(linker_item, sa2, dest_item, da2)
                     self.scene.addItem(conn1)
                     self.scene.addItem(conn2)
                     self.connection_items.extend([conn1, conn2])
                 else:
-                    conn = ConnectionItem(source_node, 0, dest_item, 0)
+                    sa, da = closest_anchors(source_node, dest_item)
+                    conn = ConnectionItem(source_node, sa, dest_item, da)
                     self.scene.addItem(conn)
                     self.connection_items.append(conn)
                 for n in self.node_items.values():
