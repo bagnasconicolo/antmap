@@ -1448,7 +1448,7 @@ class ConceptMapEditor(QMainWindow):
         self.paste_act.triggered.connect(self.paste_selection)
         self.export_pdf_act = QAction(style.standardIcon(QStyle.SP_FileIcon), "Esporta PDF", self)
         self.export_pdf_act.triggered.connect(self.export_pdf)
-        self.print_act = QAction(style.standardIcon(QStyle.SP_DialogPrintButton), "Stampa", self)
+        self.print_act = QAction(style.standardIcon(QStyle.SP_PrinterIcon), "Stampa", self)
         self.print_act.triggered.connect(self.print_map)
         # Connect actions
         self.new_act.triggered.connect(self.new_file)
@@ -1488,6 +1488,7 @@ class ConceptMapEditor(QMainWindow):
         toolbar.addAction(self.zoom_in_act)
         toolbar.addAction(self.zoom_out_act)
         toolbar.addAction(self.autofit_act)
+        toolbar.addAction(self.save_act)
         toolbar.addAction(self.export_pdf_act)
         toolbar.addAction(self.print_act)
 
