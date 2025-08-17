@@ -68,6 +68,7 @@ from PyQt5.QtCore import (
     QRectF,
     QPointF,
     QPoint,
+    QSize,
     pyqtSignal,
     QEvent,
 )
@@ -78,6 +79,7 @@ from PyQt5.QtGui import (
     QFont,
     QFontMetrics,
     QPainter,
+    QPalette,
     QTextCursor,
     QKeySequence,
     QPixmap,
@@ -111,6 +113,7 @@ from PyQt5.QtWidgets import (
     QFontComboBox,
     QCheckBox,
     QToolBar,
+    QStyle,
 )
 from PyQt5.QtPrintSupport import QPrinter, QPrintDialog
 
@@ -1389,18 +1392,21 @@ class ConceptMapEditor(QMainWindow):
         self.view = GraphicsView(self.scene, self)
         self.view.setRenderHint(QPainter.Antialiasing)
         self.view.setDragMode(QGraphicsView.RubberBandDrag)
+        self.view.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
+        self.view.setResizeAnchor(QGraphicsView.AnchorUnderMouse)
         self.setCentralWidget(self.view)
         # Actions and menu
         self._create_actions()
         self._create_menu()
         self._create_toolbar()
+        self.statusBar().showMessage("Pronto")
         # Map state
         self.node_items: Dict[str, NodeItem] = {}
         self.connection_items: List[ConnectionItem] = []
         self.temp_new_node: Optional[NodeItem] = None
         self.temp_connection: Optional[ConnectionItem] = None
         # Scene events
-        self.scene.setBackgroundBrush(QBrush(QColor("#F5F5F5")))
+        self.scene.setBackgroundBrush(QBrush(QColor("#2b2b2b")))
         self.scene.mouseDoubleClickEvent = self.scene_double_click
         self.scene.selectionChanged.connect(self.selection_changed)
         # Undo/redo stacks
@@ -1409,29 +1415,30 @@ class ConceptMapEditor(QMainWindow):
         self.push_undo_state()
 
     def _create_actions(self) -> None:
-        self.new_act = QAction("Nuovo", self)
-        self.open_act = QAction("Apri…", self)
-        self.save_act = QAction("Salva", self)
-        self.save_as_act = QAction("Salva come…", self)
-        self.exit_act = QAction("Esci", self)
-        self.zoom_in_act = QAction("Zoom in", self)
+        style = self.style()
+        self.new_act = QAction(style.standardIcon(QStyle.SP_FileIcon), "Nuovo", self)
+        self.open_act = QAction(style.standardIcon(QStyle.SP_DirOpenIcon), "Apri…", self)
+        self.save_act = QAction(style.standardIcon(QStyle.SP_DialogSaveButton), "Salva", self)
+        self.save_as_act = QAction(style.standardIcon(QStyle.SP_DialogSaveButton), "Salva come…", self)
+        self.exit_act = QAction(style.standardIcon(QStyle.SP_DialogCloseButton), "Esci", self)
+        self.zoom_in_act = QAction(style.standardIcon(QStyle.SP_ArrowUp), "Zoom in", self)
         self.zoom_in_act.setShortcut(QKeySequence.ZoomIn)
-        self.zoom_out_act = QAction("Zoom out", self)
+        self.zoom_out_act = QAction(style.standardIcon(QStyle.SP_ArrowDown), "Zoom out", self)
         self.zoom_out_act.setShortcut(QKeySequence.ZoomOut)
-        self.autofit_act = QAction("Autofit", self)
-        self.edit_style_act = QAction("Modifica stile", self)
+        self.autofit_act = QAction(style.standardIcon(QStyle.SP_BrowserReload), "Autofit", self)
+        self.edit_style_act = QAction(style.standardIcon(QStyle.SP_DialogApplyButton), "Modifica stile", self)
         self.edit_style_act.setShortcut(QKeySequence("Ctrl+E"))
         self.edit_style_act.setEnabled(False)
         self.edit_style_act.triggered.connect(self.edit_style)
-        self.copy_act = QAction("Copia", self)
+        self.copy_act = QAction(style.standardIcon(QStyle.SP_FileDialogNewFolder), "Copia", self)
         self.copy_act.setShortcut(QKeySequence.Copy)
         self.copy_act.triggered.connect(self.copy_selection)
-        self.paste_act = QAction("Incolla", self)
+        self.paste_act = QAction(style.standardIcon(QStyle.SP_FileDialogContentsView), "Incolla", self)
         self.paste_act.setShortcut(QKeySequence.Paste)
         self.paste_act.triggered.connect(self.paste_selection)
-        self.export_pdf_act = QAction("Esporta PDF", self)
+        self.export_pdf_act = QAction(style.standardIcon(QStyle.SP_FileIcon), "Esporta PDF", self)
         self.export_pdf_act.triggered.connect(self.export_pdf)
-        self.print_act = QAction("Stampa", self)
+        self.print_act = QAction(style.standardIcon(QStyle.SP_FileIcon), "Stampa", self)
         self.print_act.triggered.connect(self.print_map)
         # Connect actions
         self.new_act.triggered.connect(self.new_file)
@@ -1465,6 +1472,9 @@ class ConceptMapEditor(QMainWindow):
 
     def _create_toolbar(self) -> None:
         toolbar = self.addToolBar("View")
+        toolbar.setMovable(False)
+        toolbar.setIconSize(QSize(24, 24))
+        toolbar.setStyleSheet("QToolBar { background: #2d2d2d; border: none; }")
         toolbar.addAction(self.zoom_in_act)
         toolbar.addAction(self.zoom_out_act)
         toolbar.addAction(self.autofit_act)
@@ -2141,7 +2151,27 @@ class StartupDialog(QDialog):
 
 
 def main() -> None:
+    QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
+    QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
     app = QApplication(sys.argv)
+    app.setStyle("Fusion")
+    palette = QPalette()
+    palette.setColor(QPalette.Window, QColor(53, 53, 53))
+    palette.setColor(QPalette.WindowText, Qt.white)
+    palette.setColor(QPalette.Base, QColor(35, 35, 35))
+    palette.setColor(QPalette.AlternateBase, QColor(53, 53, 53))
+    palette.setColor(QPalette.ToolTipBase, Qt.white)
+    palette.setColor(QPalette.ToolTipText, Qt.white)
+    palette.setColor(QPalette.Text, Qt.white)
+    palette.setColor(QPalette.Button, QColor(53, 53, 53))
+    palette.setColor(QPalette.ButtonText, Qt.white)
+    palette.setColor(QPalette.BrightText, Qt.red)
+    palette.setColor(QPalette.Highlight, QColor(42, 130, 218))
+    palette.setColor(QPalette.HighlightedText, Qt.black)
+    app.setPalette(palette)
+    app.setStyleSheet(
+        "QToolTip { color: #ffffff; background-color: #2a82da; border: 1px solid white; }"
+    )
     editor = ConceptMapEditor()
     start = StartupDialog(editor)
     if start.exec_() == QDialog.Accepted:
