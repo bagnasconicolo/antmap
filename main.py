@@ -59,6 +59,7 @@ import uuid
 import xml.etree.ElementTree as ET
 import copy
 import math
+import os
 from typing import Dict, List, Optional, Tuple
 
 from PyQt5.QtCore import (
@@ -77,6 +78,7 @@ from PyQt5.QtGui import (
     QPainter,
     QTextCursor,
     QKeySequence,
+    QPixmap,
 )
 from PyQt5.QtWidgets import (
     QApplication,
@@ -141,12 +143,15 @@ class ConnectionData:
     """Represents connection data between two node ids."""
 
     def __init__(self, cid: str, from_id: str, to_id: str,
-                 arrow_start: bool = False, arrow_end: bool = True) -> None:
+                 arrow_start: bool = False, arrow_end: bool = True,
+                 from_anchor: int = 0, to_anchor: int = 0) -> None:
         self.id = cid
         self.from_id = from_id
         self.to_id = to_id
         self.arrow_start = arrow_start
         self.arrow_end = arrow_end
+        self.from_anchor = from_anchor
+        self.to_anchor = to_anchor
 
 
 class CXLDocument:
@@ -230,6 +235,18 @@ class CXLDocument:
                 from_id = conn.get("from-id") or ""
                 to_id = conn.get("to-id") or ""
                 self.connections.append(ConnectionData(cid, from_id, to_id))
+            # Parse connection anchor positions
+            conn_lookup = {c.id: c for c in self.connections}
+            for app in map_elem.findall("c:connection-appearance-list/c:connection-appearance", self.ns):
+                aid = app.get("id")
+                conn = conn_lookup.get(aid or "")
+                if not conn:
+                    continue
+                src = self.concepts.get(conn.from_id)
+                dst = self.concepts.get(conn.to_id)
+                if src and dst:
+                    conn.from_anchor = self._pos_to_anchor(app.get("from-pos", "center"), src, dst)
+                    conn.to_anchor = self._pos_to_anchor(app.get("to-pos", "center"), dst, src)
             # Extract default styles
             ss = map_elem.find("c:style-sheet-list/c:style-sheet", self.ns)
             if ss is not None:
@@ -356,6 +373,25 @@ class CXLDocument:
                 pass
         # Fallback
         return "#000000"
+
+    @staticmethod
+    def _pos_to_anchor(pos: str, node: ConceptData, other: ConceptData) -> int:
+        """Convert CXL anchor position strings to node anchor indices."""
+        p = (pos or "center").lower()
+        if p == "top":
+            return 6  # top centre
+        if p == "bottom":
+            return 7  # bottom centre
+        if p == "left":
+            return 18  # left centre
+        if p == "right":
+            return 19  # right centre
+        # For "center" or unknown, choose side based on relative position
+        dx = (other.x + other.width / 2) - (node.x + node.width / 2)
+        dy = (other.y + other.height / 2) - (node.y + node.height / 2)
+        if abs(dx) > abs(dy):
+            return 19 if dx >= 0 else 18
+        return 7 if dy >= 0 else 6
 
     def save(self, filepath: Optional[str] = None) -> None:
         """Save the current map back to a CXL file."""
@@ -1292,9 +1328,8 @@ class ConceptMapEditor(QMainWindow):
             dst_item = self.node_items.get(conn.to_id)
             if not src_item or not dst_item:
                 continue
-            # Determine anchor indices (default top to top)
-            src_anchor = 0
-            dst_anchor = 1
+            src_anchor = getattr(conn, "from_anchor", 0)
+            dst_anchor = getattr(conn, "to_anchor", 0)
             connection_item = ConnectionItem(src_item, src_anchor, dst_item, dst_anchor)
             self.scene.addItem(connection_item)
             self.connection_items.append(connection_item)
@@ -1360,6 +1395,8 @@ class ConceptMapEditor(QMainWindow):
                 conn_item.dest.data.id,
                 conn_item.arrow_start,
                 conn_item.arrow_end,
+                conn_item.source_anchor,
+                conn_item.dest_anchor,
             )
             self.document.connections.append(conn)
 
@@ -1385,7 +1422,7 @@ class ConceptMapEditor(QMainWindow):
             src_item = self.node_items.get(conn.from_id)
             dst_item = self.node_items.get(conn.to_id)
             if src_item and dst_item:
-                conn_item = ConnectionItem(src_item, 0, dst_item, 0)
+                conn_item = ConnectionItem(src_item, conn.from_anchor, dst_item, conn.to_anchor)
                 conn_item.arrow_start = conn.arrow_start
                 conn_item.arrow_end = conn.arrow_end
                 self.scene.addItem(conn_item)
@@ -1736,6 +1773,11 @@ class StartupDialog(QDialog):
         self.editor = editor
         self.setWindowTitle("Benvenuto")
         layout = QVBoxLayout(self)
+        img_label = QLabel()
+        pixmap = QPixmap(os.path.join(os.path.dirname(__file__), "intro.png"))
+        img_label.setPixmap(pixmap)
+        img_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(img_label)
         new_btn = QPushButton("Nuova mappa")
         open_btn = QPushButton("Apri...")
         import_btn = QPushButton("Importa...")
