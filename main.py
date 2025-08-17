@@ -1227,14 +1227,17 @@ class GraphicsView(QGraphicsView):
             self.scale(1 / factor, 1 / factor)
 
 class StyleDialog(QDialog):
-    """Modal dialog for editing the style of a node or connection."""
+    """Modal dialog for editing the style of one or more nodes or connections."""
 
-    def __init__(self, node: Optional[NodeItem] = None,
-                 connection: Optional[ConnectionItem] = None,
+    def __init__(self, nodes: Optional[List[NodeItem]] = None,
+                 connections: Optional[List[ConnectionItem]] = None,
                  parent=None) -> None:
         super().__init__(parent)
-        self.node = node
-        self.connection = connection
+        self.nodes = nodes or []
+        self.connections = connections or []
+        # Convenience references to the first selected item
+        self.node = self.nodes[0] if self.nodes else None
+        self.connection = self.connections[0] if self.connections else None
         self.setWindowTitle("Modifica stile")
         layout = QVBoxLayout(self)
         self.label_edit = QLineEdit()
@@ -1285,6 +1288,10 @@ class StyleDialog(QDialog):
             self.bold_check.setChecked(getattr(data, "font_bold", False))
             self.italic_check.setChecked(getattr(data, "font_italic", False))
             self.underline_check.setChecked(getattr(data, "font_underline", False))
+            self.font_color_btn.setStyleSheet(f"background-color: {data.font_color}")
+            self.fill_btn.setStyleSheet(f"background-color: {data.fill_color}")
+            self.border_btn.setStyleSheet(f"background-color: {data.border_color}")
+            self.border_thick_spin.setValue(int(data.border_width))
             self.arrow_start_btn.hide()
             self.arrow_end_btn.hide()
         elif self.connection:
@@ -1305,51 +1312,58 @@ class StyleDialog(QDialog):
             self.arrow_end_btn.hide()
 
     def choose_fill_color(self) -> None:
-        if not self.node:
+        if not self.nodes:
             return
-        colour = QColorDialog.getColor(QColor(self.node.data.fill_color), self, "Colore riempimento")
+        colour = QColorDialog.getColor(QColor(self.nodes[0].data.fill_color), self, "Colore riempimento")
         if colour.isValid():
             self.fill_btn.setStyleSheet(f"background-color: {colour.name()}")
-            self.node.data.fill_color = colour.name()
-            self.node.update()
+            for n in self.nodes:
+                n.data.fill_color = colour.name()
+                n.update()
 
     def choose_border_color(self) -> None:
-        if not self.node:
+        if not self.nodes:
             return
-        colour = QColorDialog.getColor(QColor(self.node.data.border_color), self, "Colore bordo")
+        colour = QColorDialog.getColor(QColor(self.nodes[0].data.border_color), self, "Colore bordo")
         if colour.isValid():
             self.border_btn.setStyleSheet(f"background-color: {colour.name()}")
-            self.node.data.border_color = colour.name()
-            self.node.update()
+            for n in self.nodes:
+                n.data.border_color = colour.name()
+                n.update()
 
     def choose_font_color(self) -> None:
-        if not self.node:
+        if not self.nodes:
             return
-        colour = QColorDialog.getColor(QColor(self.node.data.font_color), self, "Colore testo")
+        colour = QColorDialog.getColor(QColor(self.nodes[0].data.font_color), self, "Colore testo")
         if colour.isValid():
             self.font_color_btn.setStyleSheet(f"background-color: {colour.name()}")
-            self.node.data.font_color = colour.name()
-            self.node.update()
+            for n in self.nodes:
+                n.data.font_color = colour.name()
+                n.update()
 
     def apply(self) -> None:
-        if self.node:
+        if self.nodes:
             text = self.label_edit.text()
-            if text:
-                self.node.data.label = text
-            self.node.data.font_family = self.font_combo.currentFont().family()
-            self.node.data.font_size = self.font_size_spin.value()
-            self.node.data.font_bold = self.bold_check.isChecked()
-            self.node.data.font_italic = self.italic_check.isChecked()
-            self.node.data.font_underline = self.underline_check.isChecked()
-            self.node.data.border_width = self.border_thick_spin.value()
-            self.node.update()
-            self.node._update_bounds()
-            for conn in self.node.connections:
-                conn.update_position()
-        elif self.connection:
-            self.connection.arrow_start = self.arrow_start_btn.isChecked()
-            self.connection.arrow_end = self.arrow_end_btn.isChecked()
-            self.connection.update()
+            for node in self.nodes:
+                if len(self.nodes) == 1 and text:
+                    node.data.label = text
+                node.data.font_family = self.font_combo.currentFont().family()
+                node.data.font_size = self.font_size_spin.value()
+                node.data.font_bold = self.bold_check.isChecked()
+                node.data.font_italic = self.italic_check.isChecked()
+                node.data.font_underline = self.underline_check.isChecked()
+                node.data.border_width = self.border_thick_spin.value()
+                node.update()
+                node._update_bounds()
+                for conn in node.connections:
+                    conn.update_position()
+        elif self.connections:
+            arrow_start = self.arrow_start_btn.isChecked()
+            arrow_end = self.arrow_end_btn.isChecked()
+            for conn in self.connections:
+                conn.arrow_start = arrow_start
+                conn.arrow_end = arrow_end
+                conn.update()
 
 class ConceptMapEditor(QMainWindow):
     """Main window for concept map editing."""
@@ -1436,10 +1450,10 @@ class ConceptMapEditor(QMainWindow):
         node_items = [i for i in items if isinstance(i, NodeItem)]
         conn_items = [i for i in items if isinstance(i, ConnectionItem)]
         dlg: Optional[StyleDialog] = None
-        if len(node_items) == 1 and not conn_items:
-            dlg = StyleDialog(node=node_items[0], parent=self)
-        elif len(conn_items) == 1 and not node_items:
-            dlg = StyleDialog(connection=conn_items[0], parent=self)
+        if node_items and not conn_items:
+            dlg = StyleDialog(nodes=node_items, parent=self)
+        elif conn_items and not node_items:
+            dlg = StyleDialog(connections=conn_items, parent=self)
         if dlg is None:
             return
         self.push_undo_state()
@@ -1656,8 +1670,8 @@ class ConceptMapEditor(QMainWindow):
         node_items = [i for i in items if isinstance(i, NodeItem)]
         conn_items = [i for i in items if isinstance(i, ConnectionItem)]
         enable = (
-            (len(node_items) == 1 and not conn_items)
-            or (len(conn_items) == 1 and not node_items)
+            (len(node_items) >= 1 and not conn_items)
+            or (len(conn_items) >= 1 and not node_items)
         )
         self.edit_style_act.setEnabled(enable)
 
