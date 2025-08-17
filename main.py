@@ -245,8 +245,16 @@ class CXLDocument:
                 src = self.concepts.get(conn.from_id)
                 dst = self.concepts.get(conn.to_id)
                 if src and dst:
-                    conn.from_anchor = self._pos_to_anchor(app.get("from-pos", "center"), src, dst)
-                    conn.to_anchor = self._pos_to_anchor(app.get("to-pos", "center"), dst, src)
+                    fa = app.get("from-index")
+                    ta = app.get("to-index")
+                    if fa is not None and fa.isdigit():
+                        conn.from_anchor = int(fa)
+                    else:
+                        conn.from_anchor = self._pos_to_anchor(app.get("from-pos", "center"), src, dst)
+                    if ta is not None and ta.isdigit():
+                        conn.to_anchor = int(ta)
+                    else:
+                        conn.to_anchor = self._pos_to_anchor(app.get("to-pos", "center"), dst, src)
             # Extract default styles
             ss = map_elem.find("c:style-sheet-list/c:style-sheet", self.ns)
             if ss is not None:
@@ -393,6 +401,15 @@ class CXLDocument:
             return 19 if dx >= 0 else 18
         return 7 if dy >= 0 else 6
 
+    @staticmethod
+    def _anchor_to_pos(anchor: int) -> str:
+        """Convert an anchor index to a CXL position string."""
+        if 0 <= anchor <= 13:
+            return "top" if anchor % 2 == 0 else "bottom"
+        if 14 <= anchor <= 23:
+            return "left" if anchor % 2 == 0 else "right"
+        return "center"
+
     def save(self, filepath: Optional[str] = None) -> None:
         """Save the current map back to a CXL file."""
         if self.root is None:
@@ -448,6 +465,18 @@ class CXLDocument:
                 celem.set("id", conn.id)
                 celem.set("from-id", conn.from_id)
                 celem.set("to-id", conn.to_id)
+            # Connection appearance list
+            capplist = map_elem.find("c:connection-appearance-list", self.ns)
+            if capplist is None:
+                capplist = ET.SubElement(map_elem, f"{{{self.ns['c']}}}connection-appearance-list")
+            capplist.clear()
+            for conn in self.connections:
+                app = ET.SubElement(capplist, f"{{{self.ns['c']}}}connection-appearance")
+                app.set("id", conn.id)
+                app.set("from-pos", self._anchor_to_pos(conn.from_anchor))
+                app.set("to-pos", self._anchor_to_pos(conn.to_anchor))
+                app.set("from-index", str(conn.from_anchor))
+                app.set("to-index", str(conn.to_anchor))
             # Update style sheet based on first concept/linker
             ss_list = map_elem.find("c:style-sheet-list", self.ns)
             if ss_list is None:
