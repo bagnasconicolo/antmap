@@ -1096,7 +1096,8 @@ class StyleEditor(QWidget):
         self.arrow_start_btn.hide()
         self.arrow_end_btn.hide()
         self.enable_node_controls(node is not None)
-        self.setEnabled(node is not None)
+        # Keep the style editor itself enabled, just disable individual controls
+        self.setEnabled(True)
         if node is None:
             self.label_edit.setText("")
             self.font_combo.setCurrentFont(QFont("Verdana"))
@@ -1120,7 +1121,8 @@ class StyleEditor(QWidget):
         self.current_connection = conn
         self.current_node = None
         self.enable_node_controls(False)
-        self.setEnabled(conn is not None)
+        # Keep the style editor itself enabled
+        self.setEnabled(True)
         if conn is None:
             self.arrow_start_btn.hide()
             self.arrow_end_btn.hide()
@@ -1437,7 +1439,7 @@ class ConceptMapEditor(QMainWindow):
         items = self.scene.selectedItems()
         if len(items) == 1:
             item = items[0]
-            if isinstance(item, NodeItem) and not item.data.is_linker:
+            if isinstance(item, NodeItem):
                 self.style_editor.set_node(item)
                 self.style_editor.set_connection(None)
                 self.dock.show()
@@ -1453,7 +1455,8 @@ class ConceptMapEditor(QMainWindow):
             self.style_editor.set_node(None)
             self.style_editor.set_connection(None)
             self.dock.show()
-        self.dock.setEnabled(self.style_editor.isEnabled())
+        # Keep dock always enabled
+        self.dock.setEnabled(True)
 
     def keyPressEvent(self, event) -> None:
         if event.matches(QKeySequence.Undo):
@@ -1509,10 +1512,12 @@ class ConceptMapEditor(QMainWindow):
         if etype == QEvent.GraphicsSceneMousePress:
             # Reset any temporary items
             if self.temp_new_node is not None:
-                self.scene.removeItem(self.temp_new_node)
+                if self.temp_new_node.scene() is not None:
+                    self.scene.removeItem(self.temp_new_node)
                 self.temp_new_node = None
             if self.temp_connection is not None:
-                self.scene.removeItem(self.temp_connection)
+                if self.temp_connection.scene() is not None:
+                    self.scene.removeItem(self.temp_connection)
                 self.temp_connection = None
             for n in self.node_items.values():
                 n.hide_anchor_points()
@@ -1558,9 +1563,11 @@ class ConceptMapEditor(QMainWindow):
                     # Connecting to existing node
                     self.push_undo_state()
                     if self.temp_connection:
-                        self.scene.removeItem(self.temp_connection)
+                        if self.temp_connection.scene() is not None:
+                            self.scene.removeItem(self.temp_connection)
                         self.temp_connection = None
-                    self.scene.removeItem(self.temp_new_node)
+                    if self.temp_new_node.scene() is not None:
+                        self.scene.removeItem(self.temp_new_node)
                     self.temp_new_node = None
                     if dest_item.data.is_linker or source_node.data.is_linker:
                         use_linker = False
@@ -1594,11 +1601,11 @@ class ConceptMapEditor(QMainWindow):
                         conn2 = ConnectionItem(linker_item, 1, dest_item, 0)
                         self.scene.addItem(conn1)
                         self.scene.addItem(conn2)
-                    self.connection_items.extend([conn1, conn2])
-                else:
-                    conn = ConnectionItem(source_node, 0, dest_item, 0)
-                    self.scene.addItem(conn)
-                    self.connection_items.append(conn)
+                        self.connection_items.extend([conn1, conn2])
+                    else:
+                        conn = ConnectionItem(source_node, 0, dest_item, 0)
+                        self.scene.addItem(conn)
+                        self.connection_items.append(conn)
                 for n in self.node_items.values():
                     n.hide_anchor_points()
                 self.update_model_from_scene()
@@ -1639,7 +1646,8 @@ class ConceptMapEditor(QMainWindow):
                 self.scene.addItem(linker_item2)
                 self.node_items[lid] = linker_item2
                 if self.temp_connection:
-                    self.scene.removeItem(self.temp_connection)
+                    if self.temp_connection.scene() is not None:
+                        self.scene.removeItem(self.temp_connection)
                 conn1 = ConnectionItem(source_node, 0, linker_item2, 0)
                 conn2 = ConnectionItem(linker_item2, 1, self.temp_new_node, 0)
                 self.scene.addItem(conn1)
