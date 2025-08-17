@@ -790,6 +790,9 @@ class NodeItem(QGraphicsObject):
         # Connection handle (top centre)
         self.connection_handle_size = 10
         self.dragging_connection = False
+        # Hover tracking
+        self.hovered = False
+        self.setAcceptHoverEvents(True)
         # Connections list
         self.connections: List['ConnectionItem'] = []
         # Set initial position
@@ -865,17 +868,27 @@ class NodeItem(QGraphicsObject):
             painter.setBrush(Qt.NoBrush)
             painter.setPen(QPen(QColor("#00AEEF"), 2))
             painter.drawRoundedRect(rect, radius, radius)
-        # Resize handle
-        painter.setBrush(QBrush(QColor("#888888")))
-        painter.setPen(Qt.NoPen)
-        resize_rect = QRectF(rect.right() - self.handle_size, rect.bottom() - self.handle_size, self.handle_size, self.handle_size)
-        painter.drawRect(resize_rect)
-        # Connection handle (top centre)
-        painter.setBrush(QBrush(QColor("#6666FF")))
-        ch_size = self.connection_handle_size
-        ch_x = (rect.width() - ch_size) / 2
-        ch_y = -ch_size / 2  # Half above the node
-        painter.drawEllipse(QPointF(ch_x + ch_size / 2, ch_y + ch_size / 2), ch_size / 2, ch_size / 2)
+        if self.isSelected() or self.hovered:
+            # Resize handle
+            painter.setBrush(QBrush(QColor("#888888")))
+            painter.setPen(Qt.NoPen)
+            resize_rect = QRectF(
+                rect.right() - self.handle_size,
+                rect.bottom() - self.handle_size,
+                self.handle_size,
+                self.handle_size,
+            )
+            painter.drawRect(resize_rect)
+            # Connection handle (top centre)
+            painter.setBrush(QBrush(QColor("#6666FF")))
+            ch_size = self.connection_handle_size
+            ch_x = (rect.width() - ch_size) / 2
+            ch_y = -ch_size / 2  # Half above the node
+            painter.drawEllipse(
+                QPointF(ch_x + ch_size / 2, ch_y + ch_size / 2),
+                ch_size / 2,
+                ch_size / 2,
+            )
 
     def anchor_positions(self) -> List[QPointF]:
         """Return available anchor points on the node for connections.
@@ -930,6 +943,33 @@ class NodeItem(QGraphicsObject):
             return
         for marker in self._anchor_markers:
             marker.hide()
+
+    def update_effect(self) -> None:
+        """Update drop shadow glow based on selection/hover state."""
+        if self.isSelected() or self.hovered:
+            if not self.graphicsEffect():
+                effect = QGraphicsDropShadowEffect()
+                effect.setBlurRadius(15)
+                effect.setColor(QColor("#00AEEF"))
+                effect.setOffset(0)
+                self.setGraphicsEffect(effect)
+        else:
+            self.setGraphicsEffect(None)
+
+    def hoverEnterEvent(self, event):
+        self.hovered = True
+        self.update_effect()
+        self.show_anchor_points()
+        self.update()
+        super().hoverEnterEvent(event)
+
+    def hoverLeaveEvent(self, event):
+        self.hovered = False
+        self.update_effect()
+        if not self.isSelected():
+            self.hide_anchor_points()
+        self.update()
+        super().hoverLeaveEvent(event)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
@@ -1030,14 +1070,11 @@ class NodeItem(QGraphicsObject):
             # Notify editor
             self.node_moved.emit(self)
         elif change == QGraphicsItem.ItemSelectedHasChanged:
+            self.update_effect()
             if bool(value):
-                effect = QGraphicsDropShadowEffect()
-                effect.setBlurRadius(15)
-                effect.setColor(QColor("#00AEEF"))
-                effect.setOffset(0)
-                self.setGraphicsEffect(effect)
-            else:
-                self.setGraphicsEffect(None)
+                self.show_anchor_points()
+            elif not self.hovered:
+                self.hide_anchor_points()
         return super().itemChange(change, value)
 
     def mouseDoubleClickEvent(self, event):
@@ -1096,6 +1133,8 @@ class ConnectionItem(QGraphicsLineItem):
         # Interactivity
         self.setFlag(QGraphicsItem.ItemIsSelectable, True)
         self.setAcceptedMouseButtons(Qt.LeftButton)
+        self.hovered = False
+        self.setAcceptHoverEvents(True)
         self.setZValue(-1)
         self.setPen(QPen(QColor("#000000"), 1))
 
@@ -1108,16 +1147,29 @@ class ConnectionItem(QGraphicsLineItem):
         d_point = self.dest.mapToScene(d_anchor)
         self.setLine(s_point.x(), s_point.y(), d_point.x(), d_point.y())
 
-    def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton:
-            # Toggle anchor handles
-            if self.source_handle or self.dest_handle:
-                self.hide_anchor_handles()
-            else:
-                self.show_anchor_handles()
-            event.accept()
-            return
-        super().mousePressEvent(event)
+    def update_effect(self) -> None:
+        if self.isSelected() or self.hovered:
+            if not self.graphicsEffect():
+                effect = QGraphicsDropShadowEffect()
+                effect.setBlurRadius(15)
+                effect.setColor(QColor("#00AEEF"))
+                effect.setOffset(0)
+                self.setGraphicsEffect(effect)
+        else:
+            self.setGraphicsEffect(None)
+
+    def hoverEnterEvent(self, event):
+        self.hovered = True
+        self.update_effect()
+        self.show_anchor_handles()
+        super().hoverEnterEvent(event)
+
+    def hoverLeaveEvent(self, event):
+        self.hovered = False
+        self.update_effect()
+        if not self.isSelected():
+            self.hide_anchor_handles()
+        super().hoverLeaveEvent(event)
 
     def show_anchor_handles(self):
         """Display anchor handles at each end."""
@@ -1181,14 +1233,11 @@ class ConnectionItem(QGraphicsLineItem):
 
     def itemChange(self, change, value):
         if change == QGraphicsItem.ItemSelectedHasChanged:
+            self.update_effect()
             if bool(value):
-                effect = QGraphicsDropShadowEffect()
-                effect.setBlurRadius(15)
-                effect.setColor(QColor("#00AEEF"))
-                effect.setOffset(0)
-                self.setGraphicsEffect(effect)
-            else:
-                self.setGraphicsEffect(None)
+                self.show_anchor_handles()
+            elif not self.hovered:
+                self.hide_anchor_handles()
         return super().itemChange(change, value)
 
 
@@ -1208,10 +1257,10 @@ class GraphicsView(QGraphicsView):
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton and not self.itemAt(event.pos()):
-            self._panning = True
-            self._last_pos = event.pos()
-            self.setCursor(Qt.ClosedHandCursor)
-            event.accept()
+            scene = self.scene()
+            if scene:
+                scene.clearSelection()
+            super().mousePressEvent(event)
             return
         if event.button() in (Qt.MiddleButton, Qt.RightButton):
             self._panning = True
@@ -1232,7 +1281,7 @@ class GraphicsView(QGraphicsView):
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
-        if self._panning and event.button() in (Qt.LeftButton, Qt.MiddleButton, Qt.RightButton):
+        if self._panning and event.button() in (Qt.MiddleButton, Qt.RightButton):
             self._panning = False
             self.setCursor(Qt.ArrowCursor)
             event.accept()
@@ -2028,13 +2077,16 @@ class ConceptMapEditor(QMainWindow):
                 self.temp_new_node.setPos(pos)
                 self.temp_connection = ConnectionItem(source_node, 0, self.temp_new_node, 0)
                 self.scene.addItem(self.temp_connection)
-                # Show anchor points on all nodes for guidance
-                for n in self.node_items.values():
-                    n.show_anchor_points()
             else:
                 self.temp_new_node.setPos(pos)
                 if self.temp_connection:
                     self.temp_connection.update_position()
+            dest_item = self.scene.itemAt(pos, self.view.transform())
+            for n in self.node_items.values():
+                if n in (dest_item, source_node):
+                    n.show_anchor_points()
+                else:
+                    n.hide_anchor_points()
             return
         if etype == QEvent.GraphicsSceneMouseRelease:
             pos = event.scenePos()
