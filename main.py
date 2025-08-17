@@ -32,10 +32,10 @@ Features:
   endpoints.  Drag these handles to re-anchor the connection to
   different positions on the concept (top, bottom, left or right).
 
-* **Selection and style editing**: clicking on a concept selects it
-  and opens a docked style editor panel where properties such as
-  label, font size, fill colour, border colour and border
-  thickness can be modified.  Changes are reflected immediately.
+* **Selection and style editing**: with a concept or connection
+  selected, press **Ctrl+E** to open a modal style editor dialog
+  where properties such as label, font, colours and border settings
+  can be adjusted.
 
 * Supports loading existing CXL files in both the old style list
   format and the newer appearance-based format.  Saving will
@@ -93,7 +93,6 @@ from PyQt5.QtWidgets import (
     QGraphicsLineItem,
     QGraphicsObject,
     QGraphicsDropShadowEffect,
-    QDockWidget,
     QWidget,
     QVBoxLayout,
     QHBoxLayout,
@@ -104,6 +103,7 @@ from PyQt5.QtWidgets import (
     QColorDialog,
     QFileDialog,
     QDialog,
+    QDialogButtonBox,
     QAction,
     QMenu,
     QMessageBox,
@@ -737,7 +737,7 @@ class EditableTextItem(QGraphicsTextItem):
         # When editing finishes, revert the label item to a passive state so
         # it doesn't become an additional selected item in the scene.  If the
         # label remains selectable, the scene reports two selected items (the
-        # node and its label) which disables the style editor dock.
+        # node and its label) which confuses the selection logic.
         self.setTextInteractionFlags(Qt.NoTextInteraction)
         self.setFlag(QGraphicsItem.ItemIsSelectable, False)
         self.setAcceptedMouseButtons(Qt.NoButton)
@@ -1178,9 +1178,9 @@ class ConnectionItem(QGraphicsLineItem):
         return super().itemChange(change, value)
 
 
-#####################################################
-# Main editor window with scene, view and style panel
-#####################################################
+###################################################
+# Main editor window with scene, view and style UI
+###################################################
 
 class GraphicsView(QGraphicsView):
     """Graphics view that supports mouse-based panning and zooming."""
@@ -1226,196 +1226,130 @@ class GraphicsView(QGraphicsView):
         else:
             self.scale(1 / factor, 1 / factor)
 
-class StyleEditor(QWidget):
-    """Panel for editing the style of a selected node or connection."""
+class StyleDialog(QDialog):
+    """Modal dialog for editing the style of a node or connection."""
 
-    def __init__(self, parent=None) -> None:
+    def __init__(self, node: Optional[NodeItem] = None,
+                 connection: Optional[ConnectionItem] = None,
+                 parent=None) -> None:
         super().__init__(parent)
-        self.current_node: Optional[NodeItem] = None
-        self.current_connection: Optional[ConnectionItem] = None
+        self.node = node
+        self.connection = connection
+        self.setWindowTitle("Modifica stile")
         layout = QVBoxLayout(self)
-        # Label
         self.label_edit = QLineEdit()
         layout.addWidget(QLabel("Etichetta:"))
         layout.addWidget(self.label_edit)
-        # Font family
         self.font_combo = QFontComboBox()
         layout.addWidget(QLabel("Font:"))
         layout.addWidget(self.font_combo)
-        # Font size
         self.font_size_spin = QSpinBox()
         self.font_size_spin.setRange(6, 72)
         layout.addWidget(QLabel("Dimensione font:"))
         layout.addWidget(self.font_size_spin)
-        # Bold, italic and underline options
         self.bold_check = QCheckBox("Grassetto")
         self.italic_check = QCheckBox("Corsivo")
         self.underline_check = QCheckBox("Sottolineato")
         layout.addWidget(self.bold_check)
         layout.addWidget(self.italic_check)
         layout.addWidget(self.underline_check)
-        # Font colour
         self.font_color_btn = QPushButton("Scegli colore testo")
         layout.addWidget(self.font_color_btn)
-        # Fill colour
         self.fill_btn = QPushButton("Scegli colore riempimento")
         layout.addWidget(self.fill_btn)
-        # Border colour
         self.border_btn = QPushButton("Scegli colore bordo")
         layout.addWidget(self.border_btn)
-        # Border thickness
         self.border_thick_spin = QSpinBox()
         self.border_thick_spin.setRange(0, 10)
         layout.addWidget(QLabel("Spessore bordo:"))
         layout.addWidget(self.border_thick_spin)
-        # Arrowhead buttons for connections
-        self.arrow_start_btn = QPushButton("Freccia iniziale")
-        self.arrow_start_btn.setCheckable(True)
-        self.arrow_end_btn = QPushButton("Freccia finale")
-        self.arrow_end_btn.setCheckable(True)
+        self.arrow_start_btn = QCheckBox("Freccia iniziale")
+        self.arrow_end_btn = QCheckBox("Freccia finale")
         layout.addWidget(self.arrow_start_btn)
         layout.addWidget(self.arrow_end_btn)
-        self.arrow_start_btn.hide()
-        self.arrow_end_btn.hide()
-        # Apply button
-        self.apply_btn = QPushButton("Applica")
-        layout.addWidget(self.apply_btn)
-        layout.addStretch(1)
-        # Connect signals
-        self.apply_btn.clicked.connect(self.apply_changes)
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        layout.addWidget(button_box)
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+        self.font_color_btn.clicked.connect(self.choose_font_color)
         self.fill_btn.clicked.connect(self.choose_fill_color)
         self.border_btn.clicked.connect(self.choose_border_color)
-        self.font_color_btn.clicked.connect(self.choose_font_color)
-        self.arrow_start_btn.clicked.connect(self.apply_changes)
-        self.arrow_end_btn.clicked.connect(self.apply_changes)
-        # Disable individual controls until a selectable item is chosen
-        self.enable_node_controls(False)
-        # Ensure the editor itself remains interactive
-        self.setEnabled(True)
+        self._init_values()
 
-    def set_node(self, node: Optional[NodeItem]) -> None:
-        """Set the node currently being edited."""
-        self.current_node = node
-        self.current_connection = None
-        self.arrow_start_btn.hide()
-        self.arrow_end_btn.hide()
-        self.enable_node_controls(node is not None)
-        # Keep the style editor itself enabled, just disable individual controls
-        self.setEnabled(True)
-        if node is None:
-            self.label_edit.setText("")
-            self.font_combo.setCurrentFont(QFont("Verdana"))
-            self.font_size_spin.setValue(12)
-            self.bold_check.setChecked(False)
-            self.italic_check.setChecked(False)
-            self.underline_check.setChecked(False)
-            self.border_thick_spin.setValue(1)
-            self.fill_btn.setStyleSheet("")
-            self.border_btn.setStyleSheet("")
-            self.font_color_btn.setStyleSheet("")
-            return
-        # Populate fields
-        self.label_edit.setText(node.data.label)
-        self.font_combo.setCurrentFont(QFont(node.data.font_family))
-        self.font_size_spin.setValue(int(node.data.font_size))
-        self.bold_check.setChecked(getattr(node.data, "font_bold", False))
-        self.italic_check.setChecked(getattr(node.data, "font_italic", False))
-        self.underline_check.setChecked(getattr(node.data, "font_underline", False))
-        self.border_thick_spin.setValue(int(node.data.border_width))
-        # Set button colours
-        self.fill_btn.setStyleSheet(f"background-color: {node.data.fill_color}")
-        self.border_btn.setStyleSheet(f"background-color: {node.data.border_color}")
-        self.font_color_btn.setStyleSheet(f"background-color: {node.data.font_color}")
-
-    def set_connection(self, conn: Optional[ConnectionItem]) -> None:
-        self.current_connection = conn
-        self.current_node = None
-        self.enable_node_controls(False)
-        # Keep the style editor itself enabled
-        self.setEnabled(True)
-        if conn is None:
+    def _init_values(self) -> None:
+        if self.node:
+            data = self.node.data
+            self.label_edit.setText(data.label)
+            self.font_combo.setCurrentFont(QFont(data.font_family))
+            self.font_size_spin.setValue(int(data.font_size))
+            self.bold_check.setChecked(getattr(data, "font_bold", False))
+            self.italic_check.setChecked(getattr(data, "font_italic", False))
+            self.underline_check.setChecked(getattr(data, "font_underline", False))
             self.arrow_start_btn.hide()
             self.arrow_end_btn.hide()
-            return
-        self.arrow_start_btn.show()
-        self.arrow_end_btn.show()
-        self.arrow_start_btn.setChecked(conn.arrow_start)
-        self.arrow_end_btn.setChecked(conn.arrow_end)
+        elif self.connection:
+            self.label_edit.hide()
+            self.font_combo.hide()
+            self.font_size_spin.hide()
+            self.bold_check.hide()
+            self.italic_check.hide()
+            self.underline_check.hide()
+            self.font_color_btn.hide()
+            self.fill_btn.hide()
+            self.border_btn.hide()
+            self.border_thick_spin.hide()
+            self.arrow_start_btn.setChecked(self.connection.arrow_start)
+            self.arrow_end_btn.setChecked(self.connection.arrow_end)
+        else:
+            self.arrow_start_btn.hide()
+            self.arrow_end_btn.hide()
 
-    def enable_node_controls(self, enable: bool) -> None:
-        for widget in (
-            self.label_edit,
-            self.font_combo,
-            self.font_size_spin,
-            self.bold_check,
-            self.italic_check,
-            self.underline_check,
-            self.font_color_btn,
-            self.fill_btn,
-            self.border_btn,
-            self.border_thick_spin,
-        ):
-            widget.setEnabled(enable)
-
-    def choose_font_color(self):
-        if self.current_node is None:
+    def choose_fill_color(self) -> None:
+        if not self.node:
             return
-        colour = QColorDialog.getColor(QColor(self.current_node.data.font_color), self, "Colore testo")
+        colour = QColorDialog.getColor(QColor(self.node.data.fill_color), self, "Colore riempimento")
         if colour.isValid():
-            self.current_node.data.font_color = colour.name()
-            self.font_color_btn.setStyleSheet(f"background-color: {colour.name()}")
-            self.current_node.update()
-
-    def choose_fill_color(self):
-        if self.current_node is None:
-            return
-        colour = QColorDialog.getColor(QColor(self.current_node.data.fill_color), self, "Colore riempimento")
-        if colour.isValid():
-            self.current_node.data.fill_color = colour.name()
             self.fill_btn.setStyleSheet(f"background-color: {colour.name()}")
-            self.current_node.update()
+            self.node.data.fill_color = colour.name()
+            self.node.update()
 
-    def choose_border_color(self):
-        if self.current_node is None:
+    def choose_border_color(self) -> None:
+        if not self.node:
             return
-        colour = QColorDialog.getColor(QColor(self.current_node.data.border_color), self, "Colore bordo")
+        colour = QColorDialog.getColor(QColor(self.node.data.border_color), self, "Colore bordo")
         if colour.isValid():
-            self.current_node.data.border_color = colour.name()
             self.border_btn.setStyleSheet(f"background-color: {colour.name()}")
-            self.current_node.update()
+            self.node.data.border_color = colour.name()
+            self.node.update()
 
-    def apply_changes(self):
-        if self.current_node is None and self.current_connection is None:
+    def choose_font_color(self) -> None:
+        if not self.node:
             return
-        editor = self.parent()
-        if isinstance(editor, ConceptMapEditor):
-            editor.push_undo_state()
-        if self.current_node is not None:
-            # Apply label
+        colour = QColorDialog.getColor(QColor(self.node.data.font_color), self, "Colore testo")
+        if colour.isValid():
+            self.font_color_btn.setStyleSheet(f"background-color: {colour.name()}")
+            self.node.data.font_color = colour.name()
+            self.node.update()
+
+    def apply(self) -> None:
+        if self.node:
             text = self.label_edit.text()
             if text:
-                self.current_node.data.label = text
-            # Font options
-            self.current_node.data.font_family = self.font_combo.currentFont().family()
-            self.current_node.data.font_size = self.font_size_spin.value()
-            self.current_node.data.font_bold = self.bold_check.isChecked()
-            self.current_node.data.font_italic = self.italic_check.isChecked()
-            self.current_node.data.font_underline = self.underline_check.isChecked()
-            # Border thickness
-            self.current_node.data.border_width = self.border_thick_spin.value()
-            # Update visuals
-            self.current_node.update()
-            self.current_node._update_bounds()
-            # Update connections (in case size changed)
-            for conn in self.current_node.connections:
+                self.node.data.label = text
+            self.node.data.font_family = self.font_combo.currentFont().family()
+            self.node.data.font_size = self.font_size_spin.value()
+            self.node.data.font_bold = self.bold_check.isChecked()
+            self.node.data.font_italic = self.italic_check.isChecked()
+            self.node.data.font_underline = self.underline_check.isChecked()
+            self.node.data.border_width = self.border_thick_spin.value()
+            self.node.update()
+            self.node._update_bounds()
+            for conn in self.node.connections:
                 conn.update_position()
-        elif self.current_connection is not None:
-            self.current_connection.arrow_start = self.arrow_start_btn.isChecked()
-            self.current_connection.arrow_end = self.arrow_end_btn.isChecked()
-            self.current_connection.update()
-        if isinstance(editor, ConceptMapEditor):
-            editor.update_model_from_scene()
-
+        elif self.connection:
+            self.connection.arrow_start = self.arrow_start_btn.isChecked()
+            self.connection.arrow_end = self.arrow_end_btn.isChecked()
+            self.connection.update()
 
 class ConceptMapEditor(QMainWindow):
     """Main window for concept map editing."""
@@ -1432,14 +1366,6 @@ class ConceptMapEditor(QMainWindow):
         self.view.setRenderHint(QPainter.Antialiasing)
         self.view.setDragMode(QGraphicsView.RubberBandDrag)
         self.setCentralWidget(self.view)
-        # Style editor dock
-        self.style_editor = StyleEditor(self)
-        self.dock = QDockWidget("Proprietà", self)
-        self.dock.setWidget(self.style_editor)
-        self.addDockWidget(Qt.RightDockWidgetArea, self.dock)
-        # Keep the dock enabled so the user can always interact with it
-        self.dock.setEnabled(True)
-        self.dock.show()
         # Actions and menu
         self._create_actions()
         self._create_menu()
@@ -1469,6 +1395,10 @@ class ConceptMapEditor(QMainWindow):
         self.zoom_out_act = QAction("Zoom out", self)
         self.zoom_out_act.setShortcut(QKeySequence.ZoomOut)
         self.autofit_act = QAction("Autofit", self)
+        self.edit_style_act = QAction("Modifica stile", self)
+        self.edit_style_act.setShortcut(QKeySequence("Ctrl+E"))
+        self.edit_style_act.setEnabled(False)
+        self.edit_style_act.triggered.connect(self.edit_style)
         # Connect actions
         self.new_act.triggered.connect(self.new_file)
         self.open_act.triggered.connect(self.open_file)
@@ -1488,6 +1418,8 @@ class ConceptMapEditor(QMainWindow):
         file_menu.addAction(self.save_as_act)
         file_menu.addSeparator()
         file_menu.addAction(self.exit_act)
+        edit_menu = menubar.addMenu("Modifica")
+        edit_menu.addAction(self.edit_style_act)
         view_menu = menubar.addMenu("Vista")
         view_menu.addAction(self.zoom_in_act)
         view_menu.addAction(self.zoom_out_act)
@@ -1498,6 +1430,24 @@ class ConceptMapEditor(QMainWindow):
         toolbar.addAction(self.zoom_in_act)
         toolbar.addAction(self.zoom_out_act)
         toolbar.addAction(self.autofit_act)
+
+    def edit_style(self) -> None:
+        items = self.scene.selectedItems()
+        node_items = [i for i in items if isinstance(i, NodeItem)]
+        conn_items = [i for i in items if isinstance(i, ConnectionItem)]
+        dlg: Optional[StyleDialog] = None
+        if len(node_items) == 1 and not conn_items:
+            dlg = StyleDialog(node=node_items[0], parent=self)
+        elif len(conn_items) == 1 and not node_items:
+            dlg = StyleDialog(connection=conn_items[0], parent=self)
+        if dlg is None:
+            return
+        self.push_undo_state()
+        if dlg.exec_() == QDialog.Accepted:
+            dlg.apply()
+            self.update_model_from_scene()
+        else:
+            self.undo_stack.pop()
 
     def zoom_in(self) -> None:
         """Zoom into the scene."""
@@ -1521,8 +1471,7 @@ class ConceptMapEditor(QMainWindow):
         self.scene.clear()
         self.node_items.clear()
         self.connection_items.clear()
-        self.style_editor.set_node(None)
-        self.style_editor.set_connection(None)
+        self.edit_style_act.setEnabled(False)
 
     def new_file(self) -> None:
         """Create a new blank map."""
@@ -1706,18 +1655,11 @@ class ConceptMapEditor(QMainWindow):
         items = self.scene.selectedItems()
         node_items = [i for i in items if isinstance(i, NodeItem)]
         conn_items = [i for i in items if isinstance(i, ConnectionItem)]
-        if len(node_items) == 1 and not conn_items:
-            self.style_editor.set_node(node_items[0])
-            self.style_editor.set_connection(None)
-        elif len(conn_items) == 1 and not node_items:
-            self.style_editor.set_node(None)
-            self.style_editor.set_connection(conn_items[0])
-        else:
-            self.style_editor.set_node(None)
-            self.style_editor.set_connection(None)
-        self.dock.show()
-        # Keep dock always enabled
-        self.dock.setEnabled(True)
+        enable = (
+            (len(node_items) == 1 and not conn_items)
+            or (len(conn_items) == 1 and not node_items)
+        )
+        self.edit_style_act.setEnabled(enable)
 
     def keyPressEvent(self, event) -> None:
         if event.matches(QKeySequence.Undo):
@@ -1997,7 +1939,7 @@ class ConceptMapEditor(QMainWindow):
         return
 
     def node_moved(self, node: NodeItem) -> None:
-        """Update style editor when node moves; reserved for future use."""
+        """Placeholder for future reactions to node movement."""
         pass
 
     def node_selected(self, node: NodeItem) -> None:
