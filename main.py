@@ -1155,6 +1155,10 @@ class ConnectionItem(QGraphicsLineItem):
 
     def update_position(self) -> None:
         """Recompute the endpoints of the line based on anchor positions."""
+        # Notify the scene that the geometry will change; skipping this can
+        # leave the scene's index inconsistent and has been observed to cause
+        # connected concepts to jump to the origin during edits.
+        self.prepareGeometryChange()
         s_anchor = self.source.anchor_positions()[self.source_anchor]
         d_anchor = self.dest.anchor_positions()[self.dest_anchor]
         # Map to scene coordinates
