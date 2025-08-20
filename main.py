@@ -1720,7 +1720,7 @@ class ConceptMapEditor(QMainWindow):
 
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("CXL Concept Map Editor (PyQt)")
+        self.setWindowTitle("AntMap")
         self.setWindowIcon(QIcon(os.path.join(os.path.dirname(__file__), "antmapicon.png")))
         self.resize(1024, 768)
         # Data model
@@ -1855,7 +1855,7 @@ class ConceptMapEditor(QMainWindow):
             base = self.document.filepath
         else:
             base = "Nuova mappa"
-        title = f"{base} - Editor concetti (PyQt)"
+        title = f"{base} - AntMap"
         if getattr(self, "_dirty", False):
             title += " *"
         self.setWindowTitle(title)
