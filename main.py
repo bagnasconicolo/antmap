@@ -115,6 +115,8 @@ from PyQt5.QtWidgets import (
     QToolBar,
     QStyle,
     QGraphicsBlurEffect,
+    QGesture,
+    QPinchGesture,
 )
 from PyQt5.QtPrintSupport import QPrinter, QPrintDialog
 
@@ -1426,6 +1428,8 @@ class GraphicsView(QGraphicsView):
         self._last_pos = QPoint()
         self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
         self.setResizeAnchor(QGraphicsView.AnchorUnderMouse)
+        # Enable gesture recognition for pinch-to-zoom
+        self.viewport().grabGesture(Qt.PinchGesture)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton and not self.itemAt(event.pos()):
@@ -1461,11 +1465,27 @@ class GraphicsView(QGraphicsView):
         super().mouseReleaseEvent(event)
 
     def wheelEvent(self, event):
-        factor = 1.2
-        if event.angleDelta().y() > 0:
-            self.scale(factor, factor)
+        # Trackpad scroll (pixelDelta) pans; mouse wheel (angleDelta) zooms
+        if event.pixelDelta().manhattanLength() > 0:
+            delta = event.pixelDelta()
+            self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() - delta.x())
+            self.verticalScrollBar().setValue(self.verticalScrollBar().value() - delta.y())
         else:
-            self.scale(1 / factor, 1 / factor)
+            factor = 1.2 if event.angleDelta().y() > 0 else 1 / 1.2
+            self.scale(factor, factor)
+
+    def event(self, event):
+        if event.type() == QEvent.Gesture:
+            return self._handle_gesture(event)
+        return super().event(event)
+
+    def _handle_gesture(self, event):
+        pinch = event.gesture(Qt.PinchGesture)
+        if isinstance(pinch, QPinchGesture):
+            factor = pinch.scaleFactor() / (pinch.lastScaleFactor() or 1)
+            self.scale(factor, factor)
+            return True
+        return False
 
 class StyleDialog(QDialog):
     """Modal dialog for editing the style of one or more nodes or connections."""
