@@ -60,6 +60,7 @@ import copy
 import json
 import math
 import os
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Set
 
 from PyQt5.QtCore import (
@@ -1760,23 +1761,24 @@ class ConceptMapEditor(QMainWindow):
 
     def _create_actions(self) -> None:
         style = self.style()
+        icon_dir = Path(__file__).resolve().parent / "icons"
         self.new_act = QAction(style.standardIcon(QStyle.SP_FileIcon), "Nuovo", self)
         self.open_act = QAction(style.standardIcon(QStyle.SP_DirOpenIcon), "Apri…", self)
-        self.save_act = QAction(style.standardIcon(QStyle.SP_DialogSaveButton), "Salva", self)
+        self.save_act = QAction(QIcon(str(icon_dir / "save.png")), "Salva", self)
         self.save_as_act = QAction(style.standardIcon(QStyle.SP_DialogSaveButton), "Salva come…", self)
         self.exit_act = QAction(style.standardIcon(QStyle.SP_DialogCloseButton), "Esci", self)
-        self.zoom_in_act = QAction(style.standardIcon(QStyle.SP_ArrowUp), "Zoom in", self)
+        self.zoom_in_act = QAction(QIcon(str(icon_dir / "zoom_in.png")), "Zoom in", self)
         self.zoom_in_act.setShortcut(QKeySequence.ZoomIn)
-        self.zoom_out_act = QAction(style.standardIcon(QStyle.SP_ArrowDown), "Zoom out", self)
+        self.zoom_out_act = QAction(QIcon(str(icon_dir / "zoom_out.png")), "Zoom out", self)
         self.zoom_out_act.setShortcut(QKeySequence.ZoomOut)
-        self.autofit_act = QAction(style.standardIcon(QStyle.SP_BrowserReload), "Autofit", self)
+        self.autofit_act = QAction(QIcon(str(icon_dir / "autofit.png")), "Autofit", self)
         self.edit_style_act = QAction(style.standardIcon(QStyle.SP_DialogApplyButton), "Modifica stile", self)
         self.edit_style_act.setShortcut(QKeySequence("Ctrl+E"))
         self.edit_style_act.triggered.connect(self.edit_style)
-        self.undo_act = QAction(style.standardIcon(QStyle.SP_ArrowBack), "Annulla", self)
+        self.undo_act = QAction(QIcon(str(icon_dir / "undo.png")), "Annulla", self)
         self.undo_act.setShortcut(QKeySequence.Undo)
         self.undo_act.triggered.connect(self.undo)
-        self.redo_act = QAction(style.standardIcon(QStyle.SP_ArrowForward), "Ripeti", self)
+        self.redo_act = QAction(QIcon(str(icon_dir / "redo.png")), "Ripeti", self)
         self.redo_act.setShortcut(QKeySequence.Redo)
         self.redo_act.triggered.connect(self.redo)
         self.copy_act = QAction(style.standardIcon(QStyle.SP_FileDialogNewFolder), "Copia", self)
@@ -1785,10 +1787,9 @@ class ConceptMapEditor(QMainWindow):
         self.paste_act = QAction(style.standardIcon(QStyle.SP_FileDialogContentsView), "Incolla", self)
         self.paste_act.setShortcut(QKeySequence.Paste)
         self.paste_act.triggered.connect(self.paste_selection)
-        self.export_pdf_act = QAction(style.standardIcon(QStyle.SP_FileIcon), "Esporta PDF", self)
+        self.export_pdf_act = QAction(QIcon(str(icon_dir / "export_pdf.png")), "Esporta PDF", self)
         self.export_pdf_act.triggered.connect(self.export_pdf)
-        printer_pixmap = getattr(QStyle, "SP_PrinterIcon", QStyle.SP_FileIcon)
-        self.print_act = QAction(style.standardIcon(printer_pixmap), "Stampa", self)
+        self.print_act = QAction(QIcon(str(icon_dir / "print.png")), "Stampa", self)
         self.print_act.triggered.connect(self.print_map)
         # Connect actions
         self.new_act.triggered.connect(self.new_file)
@@ -1827,7 +1828,9 @@ class ConceptMapEditor(QMainWindow):
         toolbar = self.addToolBar("View")
         toolbar.setMovable(False)
         toolbar.setIconSize(QSize(24, 24))
-        toolbar.setStyleSheet("QToolBar { background: #2d2d2d; border: none; }")
+        toolbar.setStyleSheet(
+            "QToolBar { background: #f9f9f9; border: none; border-bottom: 1px solid #ccc; }"
+        )
         toolbar.addAction(self.undo_act)
         toolbar.addAction(self.redo_act)
         toolbar.addAction(self.zoom_in_act)
