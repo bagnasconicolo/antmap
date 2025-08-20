@@ -1278,56 +1278,29 @@ class NodeItem(QGraphicsObject):
 
 
 def closest_anchors(source: NodeItem, dest: NodeItem) -> Tuple[int, int]:
-    """Return the pair of anchor indices that best align the nodes.
+    """Return centre-side anchors based on relative node positions.
 
-    The original implementation snapped connections to the centre point of
-    the side facing the other node.  This version keeps the same idea but
-    allows the connection to attach to any of the multiple anchor points
-    available along that side.  The chosen anchor is the one whose position
-    along the edge is closest to the other node's centre.
+    The previous refactor introduced multiple anchor points along each edge
+    and attempted to pick the one closest to the other node.  For default
+    behaviour we simply want to snap connections to the centre of the side
+    facing the other node, both for concepts and linking phrases.
     """
 
-    # Scene positions of node centres
-    s_center_scene = source.mapToScene(
-        QPointF(source.data.width / 2, source.data.height / 2)
-    )
-    d_center_scene = dest.mapToScene(
-        QPointF(dest.data.width / 2, dest.data.height / 2)
-    )
-
-    dx = d_center_scene.x() - s_center_scene.x()
-    dy = d_center_scene.y() - s_center_scene.y()
-    divisions = 6  # must match NodeItem.anchor_positions
+    s_center = source.mapToScene(QPointF(source.data.width / 2, source.data.height / 2))
+    d_center = dest.mapToScene(QPointF(dest.data.width / 2, dest.data.height / 2))
+    dx = d_center.x() - s_center.x()
+    dy = d_center.y() - s_center.y()
 
     if abs(dx) >= abs(dy):
-        # Nodes relate horizontally -> use left/right sides
-        # Determine vertical ratios in local coordinates of each node
-        d_in_source = source.mapFromScene(d_center_scene)
-        s_in_dest = dest.mapFromScene(s_center_scene)
-        r_src = max(0.0, min(1.0, d_in_source.y() / source.data.height))
-        r_dst = max(0.0, min(1.0, s_in_dest.y() / dest.data.height))
-        idx_src = int(round(r_src * divisions))
-        idx_dst = int(round(r_dst * divisions))
-
-        right_side = [12, 15, 17, 19, 21, 23, 13]
-        left_side = [0, 14, 16, 18, 20, 22, 1]
+        # Horizontal relationship: use centre anchors on left/right sides
         if dx >= 0:
-            return right_side[idx_src], left_side[idx_dst]
-        return left_side[idx_src], right_side[idx_dst]
+            return 19, 18  # source right, dest left
+        return 18, 19      # source left, dest right
 
-    # Nodes relate vertically -> use top/bottom sides
-    d_in_source = source.mapFromScene(d_center_scene)
-    s_in_dest = dest.mapFromScene(s_center_scene)
-    r_src = max(0.0, min(1.0, d_in_source.x() / source.data.width))
-    r_dst = max(0.0, min(1.0, s_in_dest.x() / dest.data.width))
-    idx_src = int(round(r_src * divisions))
-    idx_dst = int(round(r_dst * divisions))
-
-    bottom_side = [1, 3, 5, 7, 9, 11, 13]
-    top_side = [0, 2, 4, 6, 8, 10, 12]
+    # Vertical relationship: use centre anchors on top/bottom sides
     if dy >= 0:
-        return bottom_side[idx_src], top_side[idx_dst]
-    return top_side[idx_src], bottom_side[idx_dst]
+        return 7, 6  # source bottom, dest top
+    return 6, 7      # source top, dest bottom
 
 
 class ConnectionItem(QGraphicsLineItem):
