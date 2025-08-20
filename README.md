@@ -1,5 +1,7 @@
 # antmap
 
+![AntMap Icon](antmapicon.png)
+
 PyQt5-based concept map editor for IHMC CXL files.
 
 ## Features
