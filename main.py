@@ -1465,14 +1465,16 @@ class GraphicsView(QGraphicsView):
         super().mouseReleaseEvent(event)
 
     def wheelEvent(self, event):
-        # Trackpad scroll (pixelDelta) pans; mouse wheel (angleDelta) zooms
-        if event.pixelDelta().manhattanLength() > 0:
-            delta = event.pixelDelta()
-            self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() - delta.x())
-            self.verticalScrollBar().setValue(self.verticalScrollBar().value() - delta.y())
-        else:
+        """Pan with trackpad scroll and zoom with a real mouse wheel."""
+        if event.source() == Qt.MouseEventNotSynthesized:
             factor = 1.2 if event.angleDelta().y() > 0 else 1 / 1.2
             self.scale(factor, factor)
+        else:
+            delta = event.pixelDelta()
+            if delta.manhattanLength() == 0:
+                delta = event.angleDelta()
+            self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() - delta.x())
+            self.verticalScrollBar().setValue(self.verticalScrollBar().value() - delta.y())
 
     def event(self, event):
         if event.type() == QEvent.Gesture:
