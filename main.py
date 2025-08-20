@@ -315,7 +315,11 @@ class CXLDocument:
                 cid = conn.get("id") or str(uuid.uuid4())
                 from_id = conn.get("from-id") or ""
                 to_id = conn.get("to-id") or ""
-                self.connections.append(ConnectionData(cid, from_id, to_id))
+                cdata = ConnectionData(cid, from_id, to_id)
+                dst = self.concepts.get(to_id)
+                if dst and dst.is_linker:
+                    cdata.arrow_end = False
+                self.connections.append(cdata)
             # Parse connection anchor positions
             conn_lookup = {c.id: c for c in self.connections}
             processed: Set[str] = set()
@@ -460,7 +464,11 @@ class CXLDocument:
                 cid = conn_elem.get("id") or str(uuid.uuid4())
                 from_id = conn_elem.get("from-id") or ""
                 to_id = conn_elem.get("to-id") or ""
-                self.connections.append(ConnectionData(cid, from_id, to_id))
+                cdata = ConnectionData(cid, from_id, to_id)
+                dst = self.concepts.get(to_id)
+                if dst and dst.is_linker:
+                    cdata.arrow_end = False
+                self.connections.append(cdata)
             # Parse style list
             style_lookup: Dict[str, ET.Element] = {}
             for style_elem in map_elem.findall("style-list/style"):
@@ -2334,6 +2342,7 @@ class ConceptMapEditor(QMainWindow):
                         self.node_items[lid] = linker_item
                         sa1, da1 = closest_anchors(source_node, linker_item)
                         conn1 = ConnectionItem(source_node, sa1, linker_item, da1)
+                        conn1.arrow_end = False
                         sa2, da2 = closest_anchors(linker_item, dest_item)
                         conn2 = ConnectionItem(linker_item, sa2, dest_item, da2)
                         self.scene.addItem(conn1)
@@ -2342,6 +2351,8 @@ class ConceptMapEditor(QMainWindow):
                     else:
                         sa, da = closest_anchors(source_node, dest_item)
                         conn = ConnectionItem(source_node, sa, dest_item, da)
+                        if dest_item.data.is_linker:
+                            conn.arrow_end = False
                         self.scene.addItem(conn)
                         self.connection_items.append(conn)
                     for n in self.node_items.values():
@@ -2391,6 +2402,7 @@ class ConceptMapEditor(QMainWindow):
                             self.scene.removeItem(self.temp_connection)
                     sa1, da1 = closest_anchors(source_node, linker_item2)
                     conn1 = ConnectionItem(source_node, sa1, linker_item2, da1)
+                    conn1.arrow_end = False
                     sa2, da2 = closest_anchors(linker_item2, self.temp_new_node)
                     conn2 = ConnectionItem(linker_item2, sa2, self.temp_new_node, da2)
                     self.scene.addItem(conn1)
@@ -2450,6 +2462,7 @@ class ConceptMapEditor(QMainWindow):
                     self.node_items[lid] = linker_item
                     sa1, da1 = closest_anchors(source_node, linker_item)
                     conn1 = ConnectionItem(source_node, sa1, linker_item, da1)
+                    conn1.arrow_end = False
                     sa2, da2 = closest_anchors(linker_item, dest_item)
                     conn2 = ConnectionItem(linker_item, sa2, dest_item, da2)
                     self.scene.addItem(conn1)
@@ -2458,6 +2471,8 @@ class ConceptMapEditor(QMainWindow):
                 else:
                     sa, da = closest_anchors(source_node, dest_item)
                     conn = ConnectionItem(source_node, sa, dest_item, da)
+                    if dest_item.data.is_linker:
+                        conn.arrow_end = False
                     self.scene.addItem(conn)
                     self.connection_items.append(conn)
                 for n in self.node_items.values():
@@ -2491,15 +2506,11 @@ class StartupDialog(QDialog):
         layout.addWidget(img_label)
         new_btn = QPushButton("Nuova mappa")
         open_btn = QPushButton("Apri...")
-        import_btn = QPushButton("Importa...")
-        save_btn = QPushButton("Salva")
         quit_btn = QPushButton("Esci")
-        for btn in (new_btn, open_btn, import_btn, save_btn, quit_btn):
+        for btn in (new_btn, open_btn, quit_btn):
             layout.addWidget(btn)
         new_btn.clicked.connect(self.handle_new)
         open_btn.clicked.connect(self.handle_open)
-        import_btn.clicked.connect(self.handle_import)
-        save_btn.clicked.connect(self.handle_save)
         quit_btn.clicked.connect(self.reject)
 
     def handle_new(self) -> None:
@@ -2509,15 +2520,6 @@ class StartupDialog(QDialog):
     def handle_open(self) -> None:
         self.editor.open_file()
         self.accept()
-
-    def handle_import(self) -> None:
-        self.editor.import_file()
-        self.accept()
-
-    def handle_save(self) -> None:
-        self.editor.save_file()
-        self.accept()
-
 
 def main() -> None:
     QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
