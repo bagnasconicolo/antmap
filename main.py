@@ -60,7 +60,7 @@ import copy
 import json
 import math
 import os
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Set
 
 from PyQt5.QtCore import (
     Qt,
@@ -249,11 +249,13 @@ class CXLDocument:
                 self.connections.append(ConnectionData(cid, from_id, to_id))
             # Parse connection anchor positions
             conn_lookup = {c.id: c for c in self.connections}
+            processed: Set[str] = set()
             for app in map_elem.findall("c:connection-appearance-list/c:connection-appearance", self.ns):
                 aid = app.get("id")
                 conn = conn_lookup.get(aid or "")
                 if not conn:
                     continue
+                processed.add(aid or "")
                 src = self.concepts.get(conn.from_id)
                 dst = self.concepts.get(conn.to_id)
                 if src and dst:
@@ -267,6 +269,14 @@ class CXLDocument:
                         conn.to_anchor = int(ta)
                     else:
                         conn.to_anchor = self._pos_to_anchor(app.get("to-pos", "center"), dst, src)
+            # Assign default anchors if no appearance information is provided
+            for conn in self.connections:
+                if conn.id not in processed:
+                    src = self.concepts.get(conn.from_id)
+                    dst = self.concepts.get(conn.to_id)
+                    if src and dst:
+                        conn.from_anchor = self._pos_to_anchor("center", src, dst)
+                        conn.to_anchor = self._pos_to_anchor("center", dst, src)
             # Extract default styles
             ss = map_elem.find("c:style-sheet-list/c:style-sheet", self.ns)
             if ss is not None:
@@ -1112,18 +1122,16 @@ class NodeItem(QGraphicsObject):
 
 
 def closest_anchors(source: NodeItem, dest: NodeItem) -> Tuple[int, int]:
-    """Return anchor indices on source and dest that minimise distance."""
-    best_src, best_dst = 0, 0
-    best_dist = float("inf")
-    for i, s_anchor in enumerate(source.anchor_positions()):
-        s_point = source.mapToScene(s_anchor)
-        for j, d_anchor in enumerate(dest.anchor_positions()):
-            d_point = dest.mapToScene(d_anchor)
-            dist = (s_point - d_point).manhattanLength()
-            if dist < best_dist:
-                best_dist = dist
-                best_src, best_dst = i, j
-    return best_src, best_dst
+    """Return centre-side anchors based on relative node positions."""
+    s_center = source.mapToScene(QPointF(source.data.width / 2, source.data.height / 2))
+    d_center = dest.mapToScene(QPointF(dest.data.width / 2, dest.data.height / 2))
+    dx = d_center.x() - s_center.x()
+    dy = d_center.y() - s_center.y()
+    if abs(dx) > abs(dy):
+        # Horizontal relationship: use centre anchors on left/right sides
+        return (19 if dx >= 0 else 18, 18 if dx >= 0 else 19)
+    # Vertical relationship: use centre anchors on top/bottom sides
+    return (7 if dy >= 0 else 6, 6 if dy >= 0 else 7)
 
 
 class ConnectionItem(QGraphicsLineItem):
