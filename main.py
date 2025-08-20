@@ -82,6 +82,7 @@ from PyQt5.QtGui import (
     QTextCursor,
     QKeySequence,
     QPixmap,
+    QIcon,
 )
 from PyQt5.QtWidgets import (
     QApplication,
@@ -1649,6 +1650,7 @@ class ConceptMapEditor(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle("CXL Concept Map Editor (PyQt)")
+        self.setWindowIcon(QIcon(os.path.join(os.path.dirname(__file__), "antmapicon.png")))
         self.resize(1024, 768)
         # Data model
         self.document = CXLDocument()
@@ -2499,6 +2501,7 @@ def main() -> None:
     QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
     QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
     app = QApplication(sys.argv)
+    app.setWindowIcon(QIcon(os.path.join(os.path.dirname(__file__), "antmapicon.png")))
     app.setStyle("Fusion")
     palette = QPalette()
     palette.setColor(QPalette.Window, QColor(53, 53, 53))
