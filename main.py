@@ -1831,6 +1831,10 @@ class ConceptMapEditor(QMainWindow):
         toolbar.setStyleSheet(
             "QToolBar { background: #f9f9f9; border: none; border-bottom: 1px solid #ccc; }"
         )
+        title_label = QLabel("AntMap")
+        title_label.setStyleSheet("font-weight: bold; padding: 0 8px;")
+        toolbar.addWidget(title_label)
+        toolbar.addSeparator()
         toolbar.addAction(self.undo_act)
         toolbar.addAction(self.redo_act)
         toolbar.addAction(self.zoom_in_act)
