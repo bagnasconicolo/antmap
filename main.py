@@ -219,6 +219,7 @@ class CXLDocument:
                 label = l_elem.get("label") or ""
                 self.concepts[lid] = ConceptData(lid, label, 100, 100, 90, 11, is_linker=True)
             # Parse positions (appearance lists)
+            
             for app in map_elem.findall("c:concept-appearance-list/c:concept-appearance", self.ns):
                 aid = app.get("id")
                 node = self.concepts.get(aid)
@@ -230,6 +231,39 @@ class CXLDocument:
                         node.height = float(app.get("height", node.height))
                     except ValueError:
                         pass
+                    # Optional per-node style overrides on appearance
+                    bg = app.get("background-color")
+                    if bg:
+                        node.fill_color = self._parse_color(bg)
+                    fc = app.get("font-color")
+                    if fc:
+                        node.font_color = self._parse_color(fc)
+                    bc = app.get("border-color")
+                    if bc:
+                        node.border_color = self._parse_color(bc)
+                    bw = app.get("border-thickness")
+                    if bw:
+                        try:
+                            node.border_width = float(bw)
+                        except ValueError:
+                            pass
+                    fn = app.get("font-name")
+                    if fn:
+                        node.font_family = fn
+                    fs = app.get("font-size")
+                    if fs:
+                        try:
+                            node.font_size = float(fs)
+                        except ValueError:
+                            pass
+                    fstyle = app.get("font-style", "")
+                    if fstyle:
+                        s = fstyle.lower()
+                        node.font_bold = "bold" in s
+                        node.font_italic = "italic" in s
+                        node.font_underline = "underline" in s
+
+            
             for app in map_elem.findall("c:linking-phrase-appearance-list/c:linking-phrase-appearance", self.ns):
                 aid = app.get("id")
                 node = self.concepts.get(aid)
@@ -241,6 +275,38 @@ class CXLDocument:
                         node.height = float(app.get("height", node.height))
                     except ValueError:
                         pass
+                    # Optional per-linker style overrides on appearance
+                    bg = app.get("background-color")
+                    if bg:
+                        node.fill_color = self._parse_color(bg)
+                    fc = app.get("font-color")
+                    if fc:
+                        node.font_color = self._parse_color(fc)
+                    bc = app.get("border-color")
+                    if bc:
+                        node.border_color = self._parse_color(bc)
+                    bw = app.get("border-thickness")
+                    if bw:
+                        try:
+                            node.border_width = float(bw)
+                        except ValueError:
+                            pass
+                    fn = app.get("font-name")
+                    if fn:
+                        node.font_family = fn
+                    fs = app.get("font-size")
+                    if fs:
+                        try:
+                            node.font_size = float(fs)
+                        except ValueError:
+                            pass
+                    fstyle = app.get("font-style", "")
+                    if fstyle:
+                        s = fstyle.lower()
+                        node.font_bold = "bold" in s
+                        node.font_italic = "italic" in s
+                        node.font_underline = "underline" in s
+
             # Parse connections
             for conn in map_elem.findall("c:connection-list/c:connection", self.ns):
                 cid = conn.get("id") or str(uuid.uuid4())
@@ -321,6 +387,59 @@ class CXLDocument:
                 node.font_bold = "bold" in style_str
                 node.font_italic = "italic" in style_str
                 node.font_underline = "underline" in style_str
+
+            # Re-apply per-node appearance style overrides (take precedence over style-sheet defaults)
+            # Concept appearance
+            for app in map_elem.findall("c:concept-appearance-list/c:concept-appearance", self.ns):
+                aid = app.get("id")
+                node = self.concepts.get(aid or "")
+                if not node:
+                    continue
+                bg = app.get("background-color"); fc = app.get("font-color")
+                bc = app.get("border-color"); bw = app.get("border-thickness")
+                fn = app.get("font-name"); fs = app.get("font-size")
+                fstyle = app.get("font-style")
+                if bg: node.fill_color = self._parse_color(bg)
+                if fc: node.font_color = self._parse_color(fc)
+                if bc: node.border_color = self._parse_color(bc)
+                if bw:
+                    try: node.border_width = float(bw)
+                    except ValueError: pass
+                if fn: node.font_family = fn
+                if fs:
+                    try: node.font_size = float(fs)
+                    except ValueError: pass
+                if fstyle:
+                    s = fstyle.lower()
+                    node.font_bold = "bold" in s
+                    node.font_italic = "italic" in s
+                    node.font_underline = "underline" in s
+            # Linking phrase appearance
+            for app in map_elem.findall("c:linking-phrase-appearance-list/c:linking-phrase-appearance", self.ns):
+                aid = app.get("id")
+                node = self.concepts.get(aid or "")
+                if not node:
+                    continue
+                bg = app.get("background-color"); fc = app.get("font-color")
+                bc = app.get("border-color"); bw = app.get("border-thickness")
+                fn = app.get("font-name"); fs = app.get("font-size")
+                fstyle = app.get("font-style")
+                if bg: node.fill_color = self._parse_color(bg)
+                if fc: node.font_color = self._parse_color(fc)
+                if bc: node.border_color = self._parse_color(bc)
+                if bw:
+                    try: node.border_width = float(bw)
+                    except ValueError: pass
+                if fn: node.font_family = fn
+                if fs:
+                    try: node.font_size = float(fs)
+                    except ValueError: pass
+                if fstyle:
+                    s = fstyle.lower()
+                    node.font_bold = "bold" in s
+                    node.font_italic = "italic" in s
+                    node.font_underline = "underline" in s
+
         else:
             # Old style list format
             # Parse concepts
@@ -477,6 +596,7 @@ class CXLDocument:
             if lpalist is None:
                 lpalist = ET.SubElement(map_elem, f"{{{self.ns['c']}}}linking-phrase-appearance-list")
             lpalist.clear()
+            
             for cid, node in self.concepts.items():
                 if node.is_linker:
                     app = ET.SubElement(lpalist, f"{{{self.ns['c']}}}linking-phrase-appearance")
@@ -487,6 +607,15 @@ class CXLDocument:
                 app.set("y", str(node.y))
                 app.set("width", str(node.width))
                 app.set("height", str(node.height))
+                # Persist per-node style attributes on appearance as RGBA values
+                app.set("background-color", self._color_to_rgba(node.fill_color))
+                app.set("font-color", self._color_to_rgba(node.font_color))
+                app.set("border-color", self._color_to_rgba(node.border_color))
+                app.set("border-thickness", str(int(getattr(node, "border_width", 1))))
+                app.set("font-name", getattr(node, "font_family", "Verdana"))
+                app.set("font-size", str(int(getattr(node, "font_size", 12))))
+                app.set("font-style", self._font_style_to_str(node))
+
             # Connection list
             conn_list = map_elem.find("c:connection-list", self.ns)
             if conn_list is None:
@@ -502,6 +631,21 @@ class CXLDocument:
             if capplist is None:
                 capplist = ET.SubElement(map_elem, f"{{{self.ns['c']}}}connection-appearance-list")
             capplist.clear()
+            # Ensure a connection-style exists to reflect logical direction (arrow at 'to' end)
+            ss_list = map_elem.find("c:style-sheet-list", self.ns)
+            if ss_list is None:
+                ss_list = ET.SubElement(map_elem, f"{{{self.ns['c']}}}style-sheet-list")
+            ss = ss_list.find("c:style-sheet", self.ns)
+            if ss is None:
+                ss = ET.SubElement(ss_list, f"{{{self.ns['c']}}}style-sheet")
+            if ss.find("c:connection-style", self.ns) is None:
+                cs = ET.SubElement(ss, f"{{{self.ns['c']}}}connection-style")
+                cs.set("color", "0,0,0,255")
+                cs.set("style", "solid")
+                cs.set("thickness", "1")
+                cs.set("type", "straight")
+                cs.set("arrowhead", "if-to-concept")
+    
             for conn in self.connections:
                 app = ET.SubElement(capplist, f"{{{self.ns['c']}}}connection-appearance")
                 app.set("id", conn.id)
